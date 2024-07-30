@@ -12,7 +12,7 @@ var PROC_START_DELAY_MS = 200;
 
 var OWNER_CREDS = {
   uid: 1001,
-  gid: 121
+  gid: 118
 }
 
 function oct2dec(octal_val) {
@@ -823,7 +823,7 @@ test.sc = function(test) {
 test.sc_deleted = function(test) {
   var server_name = 'testing';
   var instance = new mineos.mc(server_name, BASE_DIR);
-  
+
   async.series([
     async.apply(instance.create, OWNER_CREDS),
     function(callback) {
@@ -928,6 +928,7 @@ test.prune = function(test) {
         test.equal(increments.length, 2);
         test.equal(increments[0].step, '0B');
         test.equal(increments[1].step, '1B');
+
         saved_increment = increments[0].time;
         setTimeout(function() { callback(err) }, FS_DELAY_MS*5);
       })
@@ -949,7 +950,7 @@ test.prune = function(test) {
   ], function(err, results) {
     test.ifError(err);
     test.done();
-  })  
+  })
 }
 
 test.modify_sp = function(test) {
@@ -977,7 +978,7 @@ test.modify_sp = function(test) {
     test.ifError(err);
     test.expect(5);
     test.done();
-  })  
+  })
 }
 
 test.list_archive = function(test) {
@@ -1009,7 +1010,7 @@ test.list_archive = function(test) {
     test.ifError(err);
     test.expect(5);
     test.done();
-  })  
+  })
 }
 
 test.delete_archive = function(test) {
@@ -1060,12 +1061,12 @@ test.delete_archive = function(test) {
     test.ifError(err);
     test.expect(10);
     test.done();
-  })  
+  })
 }
 
 test.previous_version = function(test) {
   var ini = require('ini');
-  
+
   var server_name = 'testing';
   var instance = new mineos.mc(server_name, BASE_DIR);
 
@@ -1086,7 +1087,7 @@ test.previous_version = function(test) {
     function(callback) {
       instance.previous_version('server.properties', '0B', function(err, file_contents) {
         var decoded = ini.decode(file_contents);
-        test.equal(decoded['server-port'], 25565); 
+        test.equal(decoded['server-port'], 25565);
         callback(err);
       })
     },
@@ -1099,7 +1100,7 @@ test.previous_version = function(test) {
     function(callback) {
       instance.previous_version('server.properties', '1B', function(err, file_contents) {
         var decoded = ini.decode(file_contents);
-        test.equal(decoded['server-port'], 25565); 
+        test.equal(decoded['server-port'], 25565);
         callback(err);
       })
     }
@@ -1107,7 +1108,7 @@ test.previous_version = function(test) {
     test.ifError(err);
     test.expect(6);
     test.done();
-  }) 
+  })
 }
 
 test.previous_property = function(test) {
@@ -1257,7 +1258,7 @@ test.chown = function(test) {
 
   var NEW_OWNER_CREDS = {
     uid: 1001,
-    gid: 121
+    gid: 118
   }
 
   async.series([
@@ -1308,7 +1309,7 @@ test.chown_recursive = function(test) {
 
   var NEW_OWNER_CREDS = {
     uid: 1001,
-    gid: 121
+    gid: 118
   }
 
   var newfile = path.join(instance.env.cwd, 'newfile');
@@ -1827,7 +1828,7 @@ test.list_increment_sizes = function(test) {
     test.ifError(err);
     test.expect(13);
     test.done();
-  })  
+  })
 }
 
 test.create_unconventional_server = function(test) {

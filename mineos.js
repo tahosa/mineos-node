@@ -429,7 +429,7 @@ mineos.mc = function(server_name, base_dir) {
           unzipper.on('error', function (err) {
             cb(err);
           });
-         
+
           unzipper.on('extract', function (log) {
             move_to_parent_dir(self.env.cwd, cb);
           });
@@ -506,7 +506,7 @@ mineos.mc = function(server_name, base_dir) {
         'xmx': function (cb) {
           self.sc(function (err, dict) {
             var value = parseInt((dict.java || {}).java_xmx) || 0;
-            
+
             cb((value >= 0 ? null : 'XMX heapsize must be positive integer >= 0'), value);
           });
         },
@@ -550,7 +550,7 @@ mineos.mc = function(server_name, base_dir) {
             args.push('-Xmx{0}M'.format(results.xmx));
           if (results.xms > 0)
             args.push('-Xms{0}M'.format(results.xms));
-          
+
           if (results.java_tweaks) {
             var splits = results.java_tweaks.split(/ /);
             for (var i in splits)
@@ -704,7 +704,7 @@ mineos.mc = function(server_name, base_dir) {
   self.copy_profile = function(callback) {
     function rsync_profile(source, dest, username, groupname, callback_er) {
       var rsync = require('rsync');
-      
+
       var obj = rsync.build({
         source: source,
         destination: dest,
@@ -757,7 +757,7 @@ mineos.mc = function(server_name, base_dir) {
           shell:'ssh',
           output: [function(output) {
                     stdout.push(output);
-                  }, 
+                  },
                   function(output) {
                     stderr.push(output);
                   }]
@@ -781,7 +781,7 @@ mineos.mc = function(server_name, base_dir) {
             continue; //known pattern on freebsd: 'sent 79 bytes  received 19 bytes  196.00 bytes/sec'
           all_files = all_files.concat(incr_file_list[i].toString().split('\n'))
         }
-        
+
         cb(null, all_files.filter(function(n){ return n.length }));
       }
     ], callback)
@@ -846,15 +846,15 @@ mineos.mc = function(server_name, base_dir) {
       async.apply(self.stuff, 'stop'),
       function(cb) {
         async.whilst(
-          function() { 
+          function() {
             if (iterations > MAX_ITERATIONS_TO_QUIT)
               return false;
             else
-              return (self.server_name in mineos.server_pids_up()) 
+              return (self.server_name in mineos.server_pids_up())
           },
-          function(cc) { 
+          function(cc) {
             iterations += 1;
-            setTimeout(cc, test_interval_ms) 
+            setTimeout(cc, test_interval_ms)
           },
           function(ignored_err) {
             if (self.server_name in mineos.server_pids_up())
@@ -862,7 +862,7 @@ mineos.mc = function(server_name, base_dir) {
             else
               cb(null); //no error, stop succeeded as expected
           }
-        );  
+        );
       }
     ], callback);
   }
@@ -897,7 +897,7 @@ mineos.mc = function(server_name, base_dir) {
           iterations += 1;
           setTimeout(cb, test_interval_ms);
         },
-        function() { 
+        function() {
           if (iterations > MAX_ITERATIONS_TO_QUIT)
             return false;
           else
@@ -909,7 +909,7 @@ mineos.mc = function(server_name, base_dir) {
           else
             callback(null); //no error, stop succeeded: true
         }
-      ) 
+      )
     }
   }
 
@@ -928,7 +928,7 @@ mineos.mc = function(server_name, base_dir) {
         })
       },
       function(cb) {
-        cb(null, child_process.spawn(binary, 
+        cb(null, child_process.spawn(binary,
                                      ['-S', 'mc-{0}'.format(self.server_name),
                                       '-p', '0', '-X', 'eval', 'stuff "{0}\012"'.format(msg)],
                                      params));
@@ -952,7 +952,7 @@ mineos.mc = function(server_name, base_dir) {
         })
       },
       function(cb) {
-        cb(null, child_process.spawn(binary, 
+        cb(null, child_process.spawn(binary,
                                      ['-S', 'mc-{0}'.format(self.server_name),
                                       '-p', '0', '-X', 'eval', 'stuff "save-all\012"'],
                                      params));
@@ -968,7 +968,7 @@ mineos.mc = function(server_name, base_dir) {
     var TIMEOUT_LENGTH = 10000;
     var tail = require('tail').Tail;
 
-    try { 
+    try {
       var new_tail = new tail(path.join(self.env.cwd, 'logs/latest.log'));
     } catch (e) {
       callback(true);
@@ -1099,7 +1099,7 @@ mineos.mc = function(server_name, base_dir) {
       callback(code);
     })
   }
-  
+
   self.list_increments = function(callback) {
     var binary = which.sync('rdiff-backup');
     var args = ['--list-increments', self.env.bwd];
@@ -1155,7 +1155,10 @@ mineos.mc = function(server_name, base_dir) {
 
     rdiff.stdout.on('data', function(data) {
       var buffer = Buffer.from(data, 'ascii');
-      var lines = buffer.toString('ascii').split('\n');
+
+      // Since rdiff-backup v2.1.1a0 increments are listed in ascending order instead of descending
+      // https://github.com/rdiff-backup/rdiff-backup/blob/v2.1.1a0/CHANGELOG.adoc#11-changes
+      var lines = buffer.toString('ascii').split('\n').reverse();
       var incrs = 0;
 
       for (var i=0; i < lines.length; i++) {
@@ -1212,11 +1215,11 @@ mineos.mc = function(server_name, base_dir) {
           });
 
           callback(err || inner_err, all_info);
-        }); 
+        });
       } else {
         callback(err, all_info);
       }
-    }) 
+    })
   }
 
   self.prune = function(step, callback) {
@@ -1294,12 +1297,12 @@ mineos.mc = function(server_name, base_dir) {
             callback(err, stat_info['gid']);
         })
         break;
-      case 'exists': 
+      case 'exists':
         fs.stat(self.env.sp, function(err, stat_info) {
           callback(null, !!stat_info);
         });
         break;
-      case '!exists': 
+      case '!exists':
         fs.stat(self.env.sp, function(err, stat_info) {
           callback(null, !stat_info);
         });
@@ -1496,14 +1499,14 @@ mineos.mc = function(server_name, base_dir) {
         async.waterfall([
           async.apply(fs.readdir, self.env.cwd),
           function(sf, cb) {
-            server_files.push.apply(server_files, sf.filter(function(file) { 
-              return file.substr(-4).toLowerCase() == '.jar'; 
+            server_files.push.apply(server_files, sf.filter(function(file) {
+              return file.substr(-4).toLowerCase() == '.jar';
             }))
-            server_files.push.apply(server_files, sf.filter(function(file) { 
-              return file.substr(-5).toLowerCase() == '.phar'; 
+            server_files.push.apply(server_files, sf.filter(function(file) {
+              return file.substr(-5).toLowerCase() == '.phar';
             }))
-            server_files.push.apply(server_files, sf.filter(function(file) { 
-              return file == 'Cuberite'; 
+            server_files.push.apply(server_files, sf.filter(function(file) {
+              return file == 'Cuberite';
             }))
             cb();
           },
@@ -1521,10 +1524,10 @@ mineos.mc = function(server_name, base_dir) {
               if (err) {
                 cb();
               } else {
-                server_files.push.apply(server_files, files.filter(function(file) { 
+                server_files.push.apply(server_files, files.filter(function(file) {
                   return ((file.substr(-4).toLowerCase() == '.jar' && server_files.indexOf(file) < 0)
                        || (file.substr(-5).toLowerCase() == '.phar' && server_files.indexOf(file) < 0)
-                       || (file == 'Cuberite' && server_files.indexOf(file) < 0)); 
+                       || (file == 'Cuberite' && server_files.indexOf(file) < 0));
                 }))
                 cb();
               }
@@ -1573,7 +1576,7 @@ mineos.mc = function(server_name, base_dir) {
         self.sc(function(err,dict){
           java.usedJavaVersion(dict,callback);
         })
-        
+
         break;
       default:
         callback(true, undefined);
@@ -1602,7 +1605,7 @@ mineos.mc = function(server_name, base_dir) {
         buffer[i] = buffer[i+1];
         buffer[i+1] = a;
       }
-      return buffer; 
+      return buffer;
     }
 
     function splitBuffer(buf, delimiter) {
@@ -1652,7 +1655,7 @@ mineos.mc = function(server_name, base_dir) {
                   '\x00\x6f\x00\x73\x00\x74' +
                   '\x00\x00\x63\xdd'
         }
-        
+
       socket.setTimeout(2500);
 
       socket.on('connect', function() {
@@ -1688,7 +1691,7 @@ mineos.mc = function(server_name, base_dir) {
               players_max: parseInt(buffer_to_ascii(legacy_split[2]))
             });
           }
-        } 
+        }
       });
 
       socket.on('error', function(err) {
@@ -1708,7 +1711,7 @@ mineos.mc = function(server_name, base_dir) {
         return;
       }
       send_query_packet(dict['server-port']);
-    })  
+    })
   }
 
   self.query = function(callback) {
@@ -1779,7 +1782,7 @@ mineos.mc = function(server_name, base_dir) {
 
   self.previous_property = function(restore_as_of, callback) {
     self.previous_version('server.properties', restore_as_of, function(err, file_contents) {
-      
+
       if (err) {
         callback(err, null)
       } else {
