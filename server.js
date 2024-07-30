@@ -20,7 +20,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
   self.front_end = socket_emitter;
   self.commit_msg = '';
 
-  process.umask(0002);
+  process.umask(0o002);
 
   fs.ensureDirSync(base_dir);
   fs.ensureDirSync(path.join(base_dir, mineos.DIRS['servers']));
@@ -29,7 +29,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
   fs.ensureDirSync(path.join(base_dir, mineos.DIRS['import']));
   fs.ensureDirSync(path.join(base_dir, mineos.DIRS['profiles']));
 
-  fs.chmod(path.join(base_dir, mineos.DIRS['import']), 0777);
+  fs.chmod(path.join(base_dir, mineos.DIRS['import']), 0o777);
 
   (function() {
     var which = require('which');
@@ -92,16 +92,16 @@ server.backend = function(base_dir, socket_emitter, user_config) {
 
     /**
      * Obtains the disk utilisation for a given mount point using statvfs
-     * 
+     *
      * @param {string} path The disk mount point to monitor for free space
      */
     async function getFreeSpace(path) {
 
       try {
         const info = await check(path);
-        self.front_end.emit('host_diskspace', { 
+        self.front_end.emit('host_diskspace', {
           'availdisk': info.available,
-          'freedisk': info.free, 
+          'freedisk': info.free,
           'totaldisk': info.total
         });
       } catch (err) {
@@ -116,7 +116,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
     async function host_diskspace() {
 
       await getFreeSpace('/');
-    }    
+    }
 
     function host_heartbeat() {
 
@@ -133,7 +133,7 @@ server.backend = function(base_dir, socket_emitter, user_config) {
 
     setInterval(host_diskspace, HOST_DU_HEARTBEAT_DELAY_MS);
     setInterval(host_heartbeat, HOST_HEARTBEAT_DELAY_MS);
-    
+
   })();
 
   (function() {
@@ -792,7 +792,7 @@ function server_container(server_name, user_config, socket_io) {
     fw.add('**/server-icon.png');
     fw.add('**/config.yml');
 
-    var FS_DELAY = 250; 
+    var FS_DELAY = 250;
     function handle_event(fp) {
       // because it is unknown when fw triggers on add/change and
       // further because if it catches DURING the write, it will find
