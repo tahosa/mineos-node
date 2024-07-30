@@ -1069,7 +1069,7 @@ mineos.mc = function(server_name, base_dir) {
 
   self.backup = function(callback) {
     var binary = which.sync('rdiff-backup');
-    var args = ['--exclude', path.join(self.env.cwd, 'dynmap'), '{0}/'.format(self.env.cwd), self.env.bwd];
+    var args = ['backup', '--exclude', path.join(self.env.cwd, 'dynmap'), '{0}/'.format(self.env.cwd), self.env.bwd];
     var params = { cwd: self.env.bwd } //bwd!
 
     async.series([
@@ -1091,7 +1091,7 @@ mineos.mc = function(server_name, base_dir) {
 
   self.restore = function(step, callback) {
     var binary = which.sync('rdiff-backup');
-    var args = ['--restore-as-of', step, '--force', self.env.bwd, self.env.cwd];
+    var args = [ '--force', 'restore', '--at', step, self.env.bwd, self.env.cwd];
     var params = { cwd: self.env.bwd };
 
     var proc = child_process.spawn(binary, args, params);
@@ -1102,7 +1102,7 @@ mineos.mc = function(server_name, base_dir) {
   
   self.list_increments = function(callback) {
     var binary = which.sync('rdiff-backup');
-    var args = ['--list-increments', self.env.bwd];
+    var args = ['list', 'increments', self.env.bwd];
     var params = { cwd: self.env.bwd };
     var regex = /^.+ +(\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})/
     var increment_lines = [];
@@ -1146,7 +1146,7 @@ mineos.mc = function(server_name, base_dir) {
 
   self.list_increment_sizes = function(callback) {
     var binary = which.sync('rdiff-backup');
-    var args = ['--list-increment-sizes', self.env.bwd];
+    var args = ['list', 'increments', '--size', self.env.bwd];
     var params = { cwd: self.env.bwd };
     var regex = /^(\w.*?) {3,}(.*?) {2,}([^ ]+ \w*)/
     var increment_lines = [];
@@ -1223,7 +1223,7 @@ mineos.mc = function(server_name, base_dir) {
 
   self.prune = function(step, callback) {
     var binary = which.sync('rdiff-backup');
-    var args = ['--force', '--remove-older-than', step, self.env.bwd];
+    var args = ['--force', 'remove', 'increments', '--older-than', step, self.env.bwd];
     var params = { cwd: self.env.bwd };
     var proc = child_process.spawn(binary, args, params);
 
@@ -1759,7 +1759,7 @@ mineos.mc = function(server_name, base_dir) {
     tmp.file(function (err, new_file_path, fd, cleanupCallback) {
       if (err) throw err;
 
-      var args = ['--force', '--restore-as-of', restore_as_of, abs_filepath, new_file_path];
+      var args = ['--force', 'restore', '--at', restore_as_of, abs_filepath, new_file_path];
       var params = { cwd: self.env.bwd };
       var proc = child_process.spawn(binary, args, params);
 
