@@ -1,19 +1,19 @@
-var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
-  name: "Mojang Official Minecraft Jars",
+  name: 'Mojang Official Minecraft Jars',
   request_args: {
     url: 'https://launchermeta.mojang.com/mc/game/version_manifest.json',
     json: true
   },
   handler: function (profile_dir, body, callback) {
-    var request = require('request');
-    var p = [];
+    import * as request from 'request'
+    let p = [];
 
-    var q = async.queue(function (obj, cb) {
+    let q = async.queue(function (obj, cb) {
       async.waterfall([
         async.apply(request, obj.url),
         function (response, body, inner_cb) {
@@ -21,13 +21,13 @@ exports.profile = {
         },
         function (body, inner_cb) {
           try {
-            var parsed = JSON.parse(body);
+            let parsed = JSON.parse(body);
           } catch (err) {
             callback(err);
             inner_cb(err);
             return;
           }
-          for (var idx in p)
+          for (let idx in p)
             if (p[idx]['id'] == obj['id'])
               try {
                 p[idx]['url'] = parsed['downloads']['server']['url'];
@@ -41,9 +41,9 @@ exports.profile = {
     q.pause();
 
     try {  // BEGIN PARSING LOGIC
-      for (var index in body.versions) {
-        var item = new profile();
-        var ref_obj = body.versions[index];
+      for (let index in body.versions) {
+        let item = new profile();
+        let ref_obj = body.versions[index];
 
         item['id'] = ref_obj['id'];
         item['time'] = ref_obj['time'];

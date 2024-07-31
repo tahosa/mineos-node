@@ -1,7 +1,7 @@
-var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Feed the Beast Third-Party Server Packs - old',
@@ -10,17 +10,17 @@ exports.profile = {
     json: false
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      var xml_parser = require('xml2js');
+      import * as xml_parser from 'xml2js'
 
       xml_parser.parseString(body, function (inner_err, result) {
-        var packs = result['modpacks']['modpack'];
+        let packs = result['modpacks']['modpack'];
 
-        for (var index in packs) {
-          var item = new profile();
-          var ref_obj = packs[index]['$'];
+        for (let index in packs) {
+          let item = new profile();
+          let ref_obj = packs[index]['$'];
 
           item['id'] = '{0}-{1}'.format(ref_obj['dir'], ref_obj['version']);
           //item['time'] = ref_obj['time'];
@@ -36,9 +36,9 @@ exports.profile = {
           item['release_version'] = ref_obj['version'];
           p.push(item);
 
-          var old_versions = ref_obj['oldVersions'].split(';');
-          for (var idx in old_versions) {
-            var new_item = new profile();
+          let old_versions = ref_obj['oldVersions'].split(';');
+          for (let idx in old_versions) {
+            let new_item = new profile();
 
             new_item['id'] = '{0}-{1}'.format(ref_obj['dir'], old_versions[idx]);
             //new_item['time'] = ref_obj['time'];

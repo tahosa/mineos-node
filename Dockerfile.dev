@@ -9,6 +9,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
   curl \
   build-essential \
+  libpam0g-dev \
   && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
   && apt-get install -y nodejs
 
@@ -49,7 +50,7 @@ RUN cp /usr/games/minecraft/mineos.conf /etc/mineos.conf \
   && cp /usr/games/minecraft/entrypoint.sh /entrypoint.sh
 
 #set start command and entrypoint
-CMD ["node", "webui.js"]
+CMD ["node", "dist/webui.js"]
 ENTRYPOINT ["/entrypoint.sh"]
 
 #set image ports volumes and envs

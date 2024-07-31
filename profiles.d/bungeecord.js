@@ -1,7 +1,7 @@
-// var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+// import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'BungeeCord',
@@ -10,19 +10,19 @@ exports.profile = {
     json: false
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
-    var weight = 0;
+    let p = [];
+    let weight = 0;
 
     try {
-      var xml_parser = require('xml2js');
+      import * as xml_parser from 'xml2js'
 
       xml_parser.parseString(body, function (inner_err, result) {
         try {
-          var packs = result['feed']['entry'];
+          let packs = result['feed']['entry'];
 
-          for (var index in packs) {
-            var item = new profile();
-            var ref_obj = packs[index];
+          for (let index in packs) {
+            let item = new profile();
+            let ref_obj = packs[index];
 
             item['version'] = packs[index]['id'][0].split(':').slice(-1)[0];
             item['group'] = 'bungeecord';

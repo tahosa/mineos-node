@@ -13,8 +13,10 @@
     "skipLibCheck": true,
     "moduleResolution": "node16",
 
+    "noImplicitAny": false,
+
     "allowJs": true,
     "outDir": "./dist",
   },
-  "include": ["mineos*.js", "test/*.js"]
+  "include": ["mineos*.js", "**/*.ts"]
 }

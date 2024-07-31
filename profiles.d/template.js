@@ -1,7 +1,7 @@
-var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-// var profile = require('./template');
+import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+// import * as profile from './template'
 
 module.exports = function () {
   return {

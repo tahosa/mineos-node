@@ -1,15 +1,15 @@
-// var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+// import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Nukkit',
   handler: function (profile_dir, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      var item = new profile();
+      let item = new profile();
 
       item['id'] = 'nukkit-stable';
       item['time'] = new Date().getTime();
@@ -26,7 +26,7 @@ exports.profile = {
 
       p.push(item);
 
-      var item = {};
+      let item = {};
 
       item['id'] = 'nukkit-snapshot';
       item['time'] = new Date().getTime();

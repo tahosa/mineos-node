@@ -1,3 +1,3 @@
-var papertemplate = require('./papertemplate');
+import * as papertemplate from './papertemplate'
 
-exports.profile = papertemplate('travertine'); 
+exports.profile = papertemplate('travertine');

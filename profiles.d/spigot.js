@@ -1,15 +1,15 @@
-// var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+// import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Spigot',
   handler: function (profile_dir, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      var item = new profile();
+      let item = new profile();
 
       item['id'] = 'BuildTools-latest';
       item['time'] = new Date().getTime();

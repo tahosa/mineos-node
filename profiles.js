@@ -2,10 +2,10 @@ var logging = require('winston');
 
 var profile_manifests = {};
 
-var normalizedPath = require("path").join(__dirname, "profiles.d");
+var normalizedPath = require('path').join(__dirname, 'profiles.d');
 
 logging.info(normalizedPath);
-require("fs").readdirSync(normalizedPath).filter(fn => fn.endsWith('.js')).forEach(function(file) {
+require('fs').readdirSync(normalizedPath).filter(fn => fn.endsWith('.js')).forEach(function(file) {
   if (!file.match('template.js')) {
     var loadedProfile = require('./profiles.d/' + file);
     if(loadedProfile.profile !== undefined){
@@ -15,4 +15,4 @@ require("fs").readdirSync(normalizedPath).filter(fn => fn.endsWith('.js')).forEa
   }
 });
 
-module.exports = { "profile_manifests" : profile_manifests };
+module.exports = { 'profile_manifests' : profile_manifests };

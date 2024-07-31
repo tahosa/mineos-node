@@ -1,7 +1,7 @@
-var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Mianite',
@@ -10,14 +10,14 @@ exports.profile = {
     json: true
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      for (var r in body) {
-        var item = new profile();
-        var ref_obj = body[r];
+      for (let r in body) {
+        let item = new profile();
+        let ref_obj = body[r];
         try {
-          var version = ref_obj.version.match(/[\d+]\.[\d+]\.[\d+]/)[0];
+          let version = ref_obj.version.match(/[\d+]\.[\d+]\.[\d+]/)[0];
         } catch (e) {
           continue;
         }

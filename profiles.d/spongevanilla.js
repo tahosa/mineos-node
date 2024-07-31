@@ -1,7 +1,7 @@
-var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'SpongeVanilla',
@@ -11,18 +11,18 @@ exports.profile = {
     gzip: true
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      var xml_parser = require('xml2js');
+      import * as xml_parser from 'xml2js'
 
       xml_parser.parseString(body, function (inner_err, result) {
         try {
-          var packs = result['metadata']['versioning'][0]['versions'][0]['version'];
+          let packs = result['metadata']['versioning'][0]['versions'][0]['version'];
 
-          for (var index in packs) {
-            var item = new profile();
-            var matches = packs[index].match(/([\d\.]+)-([\d\.]+)?-?(\D+)-(\d+)/);
+          for (let index in packs) {
+            let item = new profile();
+            let matches = packs[index].match(/([\d\.]+)-([\d\.]+)?-?(\D+)-(\d+)/);
 
             item['version'] = packs[index];
             item['group'] = 'spongevanilla';

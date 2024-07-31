@@ -1,7 +1,7 @@
-// var async = require('async');
-// var path = require('path');
-// var fs = require('fs-extra');
-// var profile = require('./template');
+// import * as async from 'async'
+// import * as path from 'path'
+// import * as fs from 'fs-extra'
+// import * as profile from './template'
 
 // exports.profile = {
 //     name: 'Feed the Beast Mod Packs',
@@ -10,43 +10,43 @@
 //       json: true
 //     },
 //     handler: function(profile_dir, body, callback) {
-//       var p = [];
+//       let p = [];
 
 //       try {
-//         var request = require('request');
-//         var p = [];
+//         import * as request from 'request'
+//         let p = [];
 
-//         var q = async.queue(function(obj, cb) {
+//         let q = async.queue(function(obj, cb) {
 //             async.waterfall([
 //             async.apply(request, obj.url),
 //             function(response, body, inner_cb) {
 //               try{
-//                 var ids = JSON.parse(body)["packs"];
+//                 let ids = JSON.parse(body)["packs"];
 //               }catch(e){
 
 //               }
 //                 inner_cb(response.statusCode != 200, ids)
 //             },
 //             function(ids, inner_cb) {
-//               for (var id in ids){
+//               for (let id in ids){
 //                 async.waterfall([
 //                     async.apply(request, 'https://api.modpacks.ch/public/modpack/' + id),
 //                     function(response,body,inner_cb){
 //                         try{
-//                             var parsed = JSON.parse(body);
+//                             let parsed = JSON.parse(body);
 //                         } catch (e){}
 
 //                         inner_cb(response.statusCode != 200, parsed)
 //                     },
 //                     function(details, inner_cb){
-//                         details["versions"].forEach( ver => { 
+//                         details["versions"].forEach( ver => {
 //                             ver.id
 //                         })
 //                     }
 //                 ])
 //               }
-//             }   
-//         ]) 
+//             }
+//         ])
 // })
 //       } catch (e) {}
 

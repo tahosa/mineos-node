@@ -1,20 +1,20 @@
 
-// var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+// import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
-  name: "Cuberite C++ Server",
+  name: 'Cuberite C++ Server',
   request_args: {
     url: 'http://builds.cuberite.org/rssLatest',
     json: false
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
+    let p = [];
 
     try {  // BEGIN PARSING LOGIC
-      var item = new profile();
+      let item = new profile();
 
       item['id'] = 'cuberite-x64-latest';
       item['time'] = new Date().getTime();
@@ -77,27 +77,27 @@ exports.profile = {
     callback(null, p);
   }, //end handler
   postdownload: function (profile_dir, dest_filepath, callback) {
-    var child = require('child_process');
-    var which = require('which');
-    var binary = which.sync('tar');
-    var args = ['--force-local',
+    import * as child from 'child_process'
+    import * as which from 'which'
+    let binary = which.sync('tar');
+    let args = ['--force-local',
       '-xf', dest_filepath];
-    var params = { cwd: profile_dir }
+    let params = { cwd: profile_dir }
 
     async.series([
       function (cb) {
-        var proc = child.spawn(binary, args, params);
+        let proc = child.spawn(binary, args, params);
         proc.once('exit', function (code) {
           cb(code);
         })
       },
       function (cb) {
-        var inside_dir = path.join(profile_dir, 'Server');
+        let inside_dir = path.join(profile_dir, 'Server');
         fs.readdir(inside_dir, function (err, files) {
           if (!err)
             async.each(files, function (file, inner_cb) {
-              var old_filepath = path.join(inside_dir, file);
-              var new_filepath = path.join(profile_dir, file);
+              let old_filepath = path.join(inside_dir, file);
+              let new_filepath = path.join(profile_dir, file);
 
               fs.move(old_filepath, new_filepath, inner_cb);
             }, cb);

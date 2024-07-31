@@ -1,15 +1,15 @@
 
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Minecraft Bedrock',
   handler: function (profile_dir, callback) {
-    var p = [];
+    let p = [];
 
     try {  // BEGIN PARSING LOGIC
-      var item = new profile();
+      let item = new profile();
 
       item['id'] = 'bedrock-server-1.18.33.02';
       item['type'] = 'release';
@@ -33,7 +33,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.32.02';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.32.02.zip';
-      p.push(JSON.parse(JSON.stringify(item)));	    
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.18.31.04';
       item['type'] = 'release';
@@ -57,7 +57,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.30.04';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.30.04.zip';
-      p.push(JSON.parse(JSON.stringify(item)));	    
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.18.12.01';
       item['type'] = 'release';
@@ -69,7 +69,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.12.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.12.01.zip';
-      p.push(JSON.parse(JSON.stringify(item)));	    
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.18.11.01';
       item['type'] = 'release';
@@ -93,8 +93,8 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.2.03';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.2.03.zip';
-      p.push(JSON.parse(JSON.stringify(item))); 
-      
+      p.push(JSON.parse(JSON.stringify(item)));
+
       item['id'] = 'bedrock-server-1.18.1.02';
       item['type'] = 'release';
       item['group'] = 'bedrock-server';
@@ -105,7 +105,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.1.02';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.1.02.zip';
-      p.push(JSON.parse(JSON.stringify(item)));     
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.18.0.02';
       item['type'] = 'release';
@@ -117,7 +117,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.18.0.02';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.18.0.02.zip';
-      p.push(JSON.parse(JSON.stringify(item))); 
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.41.01';
       item['type'] = 'release';
@@ -129,7 +129,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.41.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.41.01.zip';
-      p.push(JSON.parse(JSON.stringify(item)));       
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.40.06';
       item['type'] = 'release';
@@ -141,7 +141,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.40.06';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.40.06.zip';
-      p.push(JSON.parse(JSON.stringify(item)));           
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.34.02';
       item['type'] = 'release';
@@ -165,7 +165,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.33.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.33.01.zip';
-      p.push(JSON.parse(JSON.stringify(item)));      
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.32.02';
       item['type'] = 'release';
@@ -177,8 +177,8 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.32.02';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.32.02.zip';
-      p.push(JSON.parse(JSON.stringify(item)));  
-      
+      p.push(JSON.parse(JSON.stringify(item)));
+
       item['id'] = 'bedrock-server-1.17.31.01';
       item['type'] = 'release';
       item['group'] = 'bedrock-server';
@@ -190,7 +190,7 @@ exports.profile = {
       item['release_version'] = '1.17.31.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.31.01.zip';
       p.push(JSON.parse(JSON.stringify(item)));
-      
+
       item['id'] = 'bedrock-server-1.17.30.04';
       item['type'] = 'release';
       item['group'] = 'bedrock-server';
@@ -201,7 +201,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.30.04';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.30.04.zip';
-      p.push(JSON.parse(JSON.stringify(item)));      
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.11.01';
       item['type'] = 'release';
@@ -213,7 +213,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.17.11.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.17.11.01.zip';
-      p.push(JSON.parse(JSON.stringify(item)));         
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.17.10.04';
       item['type'] = 'release';
@@ -237,7 +237,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.16.221.01';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.16.221.01.zip';
-      p.push(JSON.parse(JSON.stringify(item)));	    
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.14.60.5';
       item['type'] = 'release';
@@ -261,7 +261,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.13.3.0';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.3.0.zip';
-      p.push(JSON.parse(JSON.stringify(item)));	    
+      p.push(JSON.parse(JSON.stringify(item)));
 
       item['id'] = 'bedrock-server-1.12.1.1';
       item['type'] = 'release';
@@ -334,7 +334,7 @@ exports.profile = {
       item['release_version'] = '1.7.0.13';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.7.0.13.zip';
       p.push(JSON.parse(JSON.stringify(item)));
-	    
+
       item['id'] = 'bedrock-server-1.6.1.0';
       item['type'] = 'release';
       item['group'] = 'bedrock-server';
@@ -345,7 +345,7 @@ exports.profile = {
       item['version'] = 0;
       item['release_version'] = '1.6.1.0';
       item['url'] = 'https://minecraft.azureedge.net/bin-linux/bedrock-server-1.6.1.0.zip';
-      p.push(JSON.parse(JSON.stringify(item)));      
+      p.push(JSON.parse(JSON.stringify(item)));
 
     } catch (e) { console.error(e); }
 

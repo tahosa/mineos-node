@@ -1,7 +1,7 @@
-// var async = require('async');
-var path = require('path');
-var fs = require('fs-extra');
-var profile = require('./template');
+// import * as async from 'async'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as profile from './template'
 
 exports.profile = {
   name: 'Forge Mod',
@@ -10,13 +10,13 @@ exports.profile = {
     json: true
   },
   handler: function (profile_dir, body, callback) {
-    var p = [];
+    let p = [];
 
     try {
-      for (var index in body.promos) {
-        var item = new profile();
-        var mcver = index.split('-')[0];
-        var forgever = body.promos[index];
+      for (let index in body.promos) {
+        let item = new profile();
+        let mcver = index.split('-')[0];
+        let forgever = body.promos[index];
 
         item['id'] = index;
         item['type'] = 'release';
@@ -26,7 +26,7 @@ exports.profile = {
         item['version'] = index;
         item['release_version'] = forgever;
 
-        var ver = mcver.match(/(\d+)\.(\d+)\.?(\d+)?/);
+        let ver = mcver.match(/(\d+)\.(\d+)\.?(\d+)?/);
 
         if (parseInt(ver[1]) <= 1 && parseInt(ver[2]) <= 5) {
           // skip version 1.5.2 and earlier--non installer.jar model not supported workflow

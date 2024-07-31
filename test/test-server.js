@@ -1,13 +1,13 @@
-var path = require('path');
-var fs = require('fs-extra');
-var async = require('async');
-var userid = require('userid');
-var whoami = require('whoami');
-var mineos = require('../mineos');
-var server = require('../server');
-var events = require('events');
-var test = exports;
-var BASE_DIR = '/home/runner/minecraft';
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import * as async from 'async'
+import * as userid from 'userid'
+import * as whoami from 'whoami'
+import * as mineos from '../mineos'
+import * as server from '../server'
+import * as events from 'events'
+let test = exports;
+let BASE_DIR = '/home/runner/minecraft';
 
 test.setUp = function(callback) {
   fs.removeSync(BASE_DIR);
@@ -29,7 +29,7 @@ test.start_backend = function(test) {
     }
   ])
 
-  var be = server.backend(BASE_DIR, new events.EventEmitter);
+  let be = server.backend(BASE_DIR, new events.EventEmitter);
 
   async.waterfall([
     function(cb) {
