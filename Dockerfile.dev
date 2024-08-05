@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y \
 # copy package.json and npm install
 # by copying package.json first we stop changes in other files from triggerig a rebuild of this image stage
 COPY package.json /build
-RUN npm install
+COPY package-lock.json /build
+RUN npm ci
 
 #copy other files to build dir
 COPY . /build
