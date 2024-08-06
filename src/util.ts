@@ -1,5 +1,5 @@
-import fs from "node:fs";
-import ini from "ini";
+import fs from 'node:fs';
+import ini from 'ini';
 
 export const readIni = (filepath: string): { [key: string]: any } => {
   try {

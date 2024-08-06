@@ -16,7 +16,8 @@
     "noImplicitAny": false,
 
     "allowJs": true,
-    "outDir": "./dist",
+    "noEmit": true
   },
-  "include": ["mineos*.js", "**/*.ts"]
+  "include": ["src/*.js", "**/*.ts"],
+  "exclude": ["src/profiles.d/template.ts"]
 }

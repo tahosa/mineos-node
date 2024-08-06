@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 
-import * as getopt from "node-getopt";
-import mineos from "./mineos";
-import * as child_process from "child_process";
-import * as introspect from "introspect";
-import "node:process";
+import * as getopt from 'node-getopt';
+import mineos from './mineos';
+import * as child_process from 'child_process';
+import * as introspect from 'introspect';
+import 'node:process';
 
 const opt = getopt
   .create([
-    ["s", "server_name=SERVER_NAME", "server name"],
-    ["d", "base_dir=BASE_DIR", "defaults to /var/games/minecraft"],
-    ["D", "debug", "show debug output"],
-    ["V", "version", "show version"],
-    ["h", "help", "display this help"],
+    ['s', 'server_name=SERVER_NAME', 'server name'],
+    ['d', 'base_dir=BASE_DIR', 'defaults to /var/games/minecraft'],
+    ['D', 'debug', 'show debug output'],
+    ['V', 'version', 'show version'],
+    ['h', 'help', 'display this help'],
   ]) // create Getopt instance
   .bindHelp() // bind option 'help' to default action
   .parseSystem(); // parse command line
 
-const base_dir = (opt.options || {}).base_dir || "/var/games/minecraft";
+const base_dir = (opt.options || {}).base_dir || '/var/games/minecraft';
 let instance: mineos;
 
-if ("version" in opt.options) {
+if ('version' in opt.options) {
   return_git_commit_hash(function (code, hash) {
     if (!code) console.log(hash);
     process.exit(code);
@@ -43,22 +43,22 @@ if ("version" in opt.options) {
 
 function return_git_commit_hash(callback) {
   const gitproc = child_process.spawn(
-    "git",
-    'log -n 1 --pretty=format:"%H"'.split(" "),
+    'git',
+    'log -n 1 --pretty=format:"%H"'.split(' '),
   );
-  let commit_value = "";
+  let commit_value = '';
 
-  gitproc.stdout.on("data", function (data) {
-    const buffer = Buffer.from(data, "ascii");
-    commit_value = buffer.toString("ascii");
+  gitproc.stdout.on('data', function (data) {
+    const buffer = Buffer.from(data, 'ascii');
+    commit_value = buffer.toString('ascii');
   });
 
-  gitproc.on("error", function (code) {
+  gitproc.on('error', function (code) {
     // branch if path does not exist
     if (code) callback(true, undefined);
   });
 
-  gitproc.on("exit", function (code) {
+  gitproc.on('exit', function (code) {
     if (code == 0)
       // branch if all is well
       callback(code, commit_value);
@@ -76,7 +76,7 @@ function handle_server(args, callback) {
     const ra = required_args.shift();
 
     switch (ra) {
-      case "callback":
+      case 'callback':
         arg_array.push(function (err, payload) {
           const retval: any[] = [];
 
@@ -94,17 +94,17 @@ function handle_server(args, callback) {
           callback(err ? 1 : 0, retval);
         });
         break;
-      case "owner":
+      case 'owner':
         try {
-          const owner_pair = opt.argv.shift().split(":");
-          if (owner_pair.length != 2) throw "err";
+          const owner_pair = opt.argv.shift().split(':');
+          if (owner_pair.length != 2) throw 'err';
           arg_array.push({
             uid: parseInt(owner_pair[0]),
             gid: parseInt(owner_pair[1]),
           });
         } catch (e) {
           callback(1, [
-            "Provide owner attribute as uid:gid pair, e.g., 1000:1000",
+            'Provide owner attribute as uid:gid pair, e.g., 1000:1000',
           ]);
           return;
         }

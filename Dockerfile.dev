@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
   build-essential \
   libpam0g-dev \
   && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-  && apt-get install -y nodejs
+  && apt-get install -y nodejs \
+  && npm install --global ts-node
 
 # copy package.json and npm install
 # by copying package.json first we stop changes in other files from triggerig a rebuild of this image stage
@@ -51,7 +52,7 @@ RUN cp /usr/games/minecraft/mineos.conf /etc/mineos.conf \
   && cp /usr/games/minecraft/entrypoint.sh /entrypoint.sh
 
 #set start command and entrypoint
-CMD ["node", "dist/webui.js"]
+CMD ["node", "-r", "ts-node", "src/webui.js"]
 ENTRYPOINT ["/entrypoint.sh"]
 
 #set image ports volumes and envs
