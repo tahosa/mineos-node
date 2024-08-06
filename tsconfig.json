@@ -18,6 +18,5 @@
     "allowJs": true,
     "noEmit": true
   },
-  "include": ["src/*.js", "**/*.ts"],
-  "exclude": ["src/profiles.d/template.ts"]
+  "include": ["src/*.js", "**/*.ts"]
 }

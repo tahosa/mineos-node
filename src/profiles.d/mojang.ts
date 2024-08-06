@@ -3,19 +3,19 @@ import path from 'path';
 import fs from 'fs-extra';
 import request from 'request';
 
-import profile from './template';
+import profile, { type collection } from './template';
 
 export default {
-  profile: {
-    name: 'Mojang Official Minecraft Jars',
-    request_args: {
-      url: 'https://launchermeta.mojang.com/mc/game/version_manifest.json',
-      json: true,
-    },
-    handler: (profile_dir, body, callback) => {
-      const p: profile[] = [];
+  name: 'Mojang Official Minecraft Jars',
+  request_args: {
+    url: 'https://launchermeta.mojang.com/mc/game/version_manifest.json',
+    type: 'json',
+  },
+  handler: async (profile_dir, body) => {
+    const p: profile[] = [];
 
-      const q = async.queue<ReturnType<typeof request>>((obj, cb) => {
+    return new Promise<profile[]>((resolve, reject) => {
+      const q = async.queue((obj: { url: string; id?: string }, cb) => {
         async.waterfall([
           async.apply(request, obj.url),
           (response, body, inner_cb) => {
@@ -26,7 +26,6 @@ export default {
             try {
               parsed = JSON.parse(body);
             } catch (err) {
-              callback(err);
               inner_cb(err);
               return;
             }
@@ -86,15 +85,13 @@ export default {
         }
       } catch (e) {
         console.error(e);
+        reject(e);
       }
 
       q.resume();
       q.drain = async () => {
-        callback(null, p);
+        resolve(p);
       };
-    }, //end handler
-    postdownload: (profile_dir, dest_filepath, callback) => {
-      callback();
-    },
-  },
-};
+    });
+  }, //end handler
+} as collection;

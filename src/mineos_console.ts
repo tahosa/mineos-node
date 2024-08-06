@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-
-import * as getopt from 'node-getopt';
-import mineos from './mineos';
-import * as child_process from 'child_process';
-import * as introspect from 'introspect';
 import 'node:process';
+
+import child_process from 'child_process';
+import getopt from 'node-getopt';
+import introspect from 'introspect';
+
+import mineos from './mineos';
 
 const opt = getopt
   .create([

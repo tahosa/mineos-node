@@ -6,9 +6,8 @@ import nodePosix from 'posix';
 import passwd from 'etc-passwd';
 import userid from 'userid';
 
-// authenticate-pam is an ESM module, so we need this workaround to import it
-// @ts-ignore
-const authenticatePam = require('authenticate-pam'); // eslint-disable-line @typescript-eslint/no-var-requires
+// @ts-expect-error
+import authenticatePam from 'authenticate-pam';
 
 const auth = {
   authenticate_shadow: (user, plaintext, callback) => {

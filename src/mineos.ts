@@ -70,20 +70,15 @@ export const SP_DEFAULTS = {
   'enable-query': 'false',
 };
 
-export const dependencies: ReturnType<typeof async.memoize> = async.memoize(
-  (callback: async.AsyncResultCallback<{ [key: string]: any }>) => {
-    async.parallel(
-      {
-        screen: async.apply(which, 'screen'),
-        tar: async.apply(which, 'tar'),
-        rsync: async.apply(which, 'rsync'),
-        java: async.apply(which, 'java'),
-        'rdiff-backup': async.apply(which, 'rdiff-backup'),
-      },
-      callback,
-    );
-  },
-);
+export const checkDependencies = (): { [key: string]: string } => {
+  return {
+    screen: which.sync('screen'),
+    tar: which.sync('tar'),
+    rsync: which.sync('rsync'),
+    java: which.sync('java'),
+    'rdiff-backup': which.sync('rdiff-backup'),
+  };
+};
 
 export const server_list_up = () => {
   return Object.keys(server_pids_up());

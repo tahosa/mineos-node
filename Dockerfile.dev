@@ -52,7 +52,7 @@ RUN cp /usr/games/minecraft/mineos.conf /etc/mineos.conf \
   && cp /usr/games/minecraft/entrypoint.sh /entrypoint.sh
 
 #set start command and entrypoint
-CMD ["node", "-r", "ts-node", "src/webui.js"]
+CMD ["node", "-r", "ts-node", "src/webui.ts"]
 ENTRYPOINT ["/entrypoint.sh"]
 
 #set image ports volumes and envs

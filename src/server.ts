@@ -1,6 +1,5 @@
 import Socket from 'socket.io';
-
-import mineos, { DIRS } from './mineos';
+import axios from 'axios';
 import async from 'async';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,7 +11,7 @@ import which from 'which';
 import child from 'child_process';
 import rsync from 'rsync';
 import dgram from 'dgram';
-import Fireworm from 'fireworm/index.js';
+import Fireworm from 'fireworm/index';
 import request from 'request';
 import userid from 'userid';
 import progress from 'request-progress';
@@ -23,16 +22,21 @@ import passwd from 'etc-passwd';
 import { constants } from 'node:fs';
 import introspect from 'introspect';
 import { Tail } from 'tail';
-import auth from './auth';
 import { CronJob } from 'cron';
 import { randomUUID } from 'node:crypto';
 import hash from 'object-hash';
 
+import auth from './auth';
+import mineos, { DIRS } from './mineos';
+import PROFILES from './profiles';
+import type profile from './profiles.d/template';
+
+const SOURCES = PROFILES.profile_manifests;
 const F_OK = constants.F_OK;
 
 logging.add(
   new logging.transports.File({
-    filename: '/var/log/mineos.log',
+    filename: '/home/rlcrock/mineos/mineos.log',
     handleExceptions: true,
   }),
 );
@@ -40,7 +44,7 @@ logging.add(
 export default class server {
   base_dir: string;
   servers = {};
-  profiles: { id: string }[] = [];
+  profiles: profile[] = [];
   front_end: Socket;
   commit_msg = '';
 
@@ -128,7 +132,9 @@ export default class server {
               }
             });
           }
-          setTimeout(next, BROADCAST_DELAY_MS);
+          setTimeout(() => {
+            next();
+          }, BROADCAST_DELAY_MS);
         },
         () => {},
       );
@@ -205,7 +211,11 @@ export default class server {
         this.servers[sn] = null;
         //if new server_container() isn't instant, double broadcast might trigger this if/then twice
         //setting to null is immediate and prevents double execution
-        this.servers[sn] = new server_container(sn, user_config);
+        this.servers[sn] = new server_container(
+          sn,
+          user_config,
+          this.front_end,
+        );
         this.front_end.emit('track_server', sn);
       };
 
@@ -254,7 +264,9 @@ export default class server {
       });
     })();
 
-    setTimeout(this.start_servers, 5000);
+    setTimeout(() => {
+      this.start_servers();
+    }, 5000);
 
     this.front_end.on('connection', (socket) => {
       const ip_address = socket.request.connection.remoteAddress;
@@ -338,7 +350,6 @@ export default class server {
           case 'download':
             for (const idx in this.profiles) {
               if (this.profiles[idx].id == args.profile.id) {
-                const SOURCES = require('./profiles.js')['profile_manifests']; // eslint-disable-line @typescript-eslint/no-var-requires
                 const profile_dir = path.join(
                   base_dir,
                   'profiles',
@@ -419,13 +430,18 @@ export default class server {
                       // redownload of profiles, SOURCES might be empty/lacking the unfinished dl.
                       // opting for full try/catch around postdownload to gracefully handle profile errors
                       try {
-                        if ('postdownload' in SOURCES[args.profile['group']])
-                          SOURCES[args.profile['group']].postdownload(
+                        if (SOURCES[args.profile['group']].postdownload) {
+                          SOURCES[args.profile['group']].postdownload!(
                             profile_dir,
                             dest_filepath,
-                            cb,
-                          );
-                        else cb();
+                          )
+                            .then(() => {
+                              cb();
+                            })
+                            .catch((err) => {
+                              cb(err);
+                            });
+                        } else cb();
                       } catch (e) {
                         logging.error(
                           'simultaneous download race condition means postdownload hook may not have executed. redownload the profile to ensure proper operation.',
@@ -732,7 +748,12 @@ export default class server {
               `[${server_name}] Server started. Waiting ${MS_TO_PAUSE} ms...`,
             );
 
-          setTimeout(callback, err ? 1 : MS_TO_PAUSE);
+          setTimeout(
+            () => {
+              callback();
+            },
+            err ? 1 : MS_TO_PAUSE,
+          );
         });
       },
       () => {},
@@ -743,82 +764,48 @@ export default class server {
     for (const server_name in this.servers) this.servers[server_name].cleanup();
   }
 
-  send_profile_list(send_existing?: boolean) {
+  async send_profile_list(send_existing?: boolean) {
     if (send_existing && this.profiles.length)
       //if requesting to just send what you already have AND they are already present
       this.front_end.emit('profile_list', this.profiles);
     else {
       const profile_dir = path.join(this.base_dir, DIRS['profiles']);
-      const SIMULTANEOUS_DOWNLOADS = 3;
-      let SOURCES: any[] = []; // TODO: add types to profiles
-      let profiles = [];
+      // const SIMULTANEOUS_DOWNLOADS = 3; // TODO: figure out promise pooling
+      let profiles: profile[] = [];
 
-      try {
-        SOURCES = require('./profiles.js')['profile_manifests']; // eslint-disable-line @typescript-eslint/no-var-requires
-      } catch (e) {
-        logging.error('Unable to parse profiles.js--no profiles loaded!');
-        logging.error(e);
-        return; // just bail out if profiles.js cannot be required for syntax issues
-      }
+      await Promise.all(
+        Object.entries(SOURCES).map(async ([name, profile]) => {
+          try {
+            let output: profile[] = [];
+            if (profile.request_args) {
+              const response = await axios.get(profile.request_args.url, {
+                responseType: profile.request_args.type,
+              });
+              if (response.status != 200) {
+                throw new Error(`${response.data}`);
+              } else {
+                output = await profile
+                  .handler(profile_dir, response.data)
+                  .catch((err) => err);
+              }
+            } else {
+              output = await profile.handler(profile_dir);
+            }
 
-      async.forEachOfLimit(
-        SOURCES,
-        SIMULTANEOUS_DOWNLOADS,
-        (collection, key, outer_cb) => {
-          if ('request_args' in collection) {
-            async.waterfall(
-              [
-                async.apply(request, collection.request_args),
-                (response, body, cb) => {
-                  cb(response.statusCode != 200, body);
-                },
-                (body, cb) => {
-                  collection.handler(profile_dir, body, cb);
-                },
-              ],
-              (err, output: any) => {
-                if (err || typeof output == 'undefined')
-                  logging.error(
-                    `Unable to retrieve profile: ${key}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`,
-                  );
-                else {
-                  logging.info(
-                    `Downloaded information for collection: ${collection.name} (${output.length} entries)`,
-                  );
-                  profiles = profiles.concat(output);
-                }
-                outer_cb();
-              },
-            ); //end waterfall
-          } else {
-            //for profiles like paperspigot which are hardcoded
-            async.waterfall(
-              [
-                (cb) => {
-                  collection.handler(profile_dir, cb);
-                },
-              ],
-              (err, output: any) => {
-                if (err || typeof output == 'undefined')
-                  logging.error(
-                    `Unable to retrieve profile: ${key}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`,
-                  );
-                else {
-                  logging.info(
-                    `Downloaded information for collection: ${collection.name} (${output.length} entries)`,
-                  );
-                  profiles = profiles.concat(output);
-                }
-                outer_cb();
-              },
-            ); //end waterfall
+            logging.info(
+              `Downloaded information for collection: ${name} (${output.length} entries)`,
+            );
+            profiles = profiles.concat(output);
+          } catch (e) {
+            logging.error(
+              `Unable to retrieve profile: ${name}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`,
+            );
           }
-        },
-        () => {
-          this.profiles = profiles;
-          this.front_end.emit('profile_list', this.profiles);
-        },
-      ); //end forEachOfLimit
+        }),
+      );
+
+      this.profiles = profiles;
+      this.front_end.emit('profile_list', this.profiles);
     }
   }
 
@@ -901,269 +888,6 @@ export default class server {
 }
 
 export class server_container {
-  broadcast_to_lan(callback) {
-    async.waterfall(
-      [
-        async.apply(this.instance.verify, 'exists'),
-        async.apply(this.instance.verify, 'up'),
-        async.apply(this.instance.sc),
-        (sc_data, cb) => {
-          const broadcast_value = (sc_data.minecraft || {}).broadcast;
-          cb(!broadcast_value); //logically notted to make broadcast:true pass err cb
-        },
-        async.apply(this.instance.sp),
-      ],
-      (err, sp_data: any) => {
-        if (err) callback(null);
-        else {
-          const msg = Buffer.from(
-            '[MOTD]' +
-              sp_data.motd +
-              '[/MOTD][AD]' +
-              sp_data['server-port'] +
-              '[/AD]',
-          );
-          const server_ip = sp_data['server-ip'];
-          callback(msg, server_ip);
-        }
-      },
-    );
-  }
-
-  onreboot_start(callback) {
-    async.waterfall(
-      [
-        async.apply(this.instance.property, 'onreboot_start'),
-        (autostart, cb) => {
-          logging.info(
-            `[${this.instance.server_name}] autostart = ${autostart}`,
-          );
-          cb(!autostart); //logically NOT'ing so that autostart = true continues to next func
-        },
-        async.apply(this.instance.start),
-      ],
-      (err) => {
-        callback(err);
-      },
-    );
-  }
-
-  cleanup() {
-    for (const t in this.tails) this.tails[t].unwatch();
-
-    for (const i in this.intervals) clearInterval(this.intervals[i]);
-
-    this.nsp.removeAllListeners();
-  }
-
-  emit_eula() {
-    async.waterfall([
-      async.apply(this.instance.property, 'eula'),
-      (accepted, cb) => {
-        logging.info(
-          `[${this.instance.server_name}] eula.txt detected: ${accepted ? 'ACCEPTED' : 'NOT YET ACCEPTED'} (eula=${accepted})`,
-        );
-        this.nsp.emit('eula', accepted);
-        cb();
-      },
-    ]);
-  }
-
-  broadcast_icon() {
-    // function to encode file data to base64 encoded string
-    //http://www.hacksparrow.com/base64-encoding-decoding-in-node-js.html
-    const filepath = path.join(this.instance.env.cwd, 'server-icon.png');
-    fs.readFile(filepath, (err, data) => {
-      if (!err && data.toString('hex', 0, 4) == '89504e47')
-        //magic number for png first 4B
-        this.nsp.emit('server-icon.png', Buffer.from(data).toString('base64'));
-    });
-  }
-
-  broadcast_cy() {
-    // function to broadcast raw config.yml from bungeecord
-    const filepath = path.join(this.instance.env.cwd, 'config.yml');
-    fs.readFile(filepath, (err, data) => {
-      if (!err) this.nsp.emit('config.yml', Buffer.from(data).toString());
-    });
-  }
-
-  broadcast_notices() {
-    this.nsp.emit('notices', this.notices);
-  }
-
-  broadcast_sp() {
-    this.instance.sp((err, sp_data) => {
-      logging.debug(
-        `[${this.instance.server_name}] broadcasting server.properties`,
-      );
-      this.nsp.emit('server.properties', sp_data);
-    });
-  }
-
-  broadcast_sc() {
-    this.instance.sc((err, sc_data) => {
-      logging.debug(
-        `[${this.instance.server_name}] broadcasting server.config`,
-      );
-      if (!err) this.nsp.emit('server.config', sc_data);
-    });
-  }
-
-  broadcast_cc() {
-    this.instance.crons((err, cc_data) => {
-      logging.debug(`[${this.instance.server_name}] broadcasting cron.config`);
-      if (!err) this.nsp.emit('cron.config', cc_data);
-    });
-  }
-
-  make_tail(rel_filepath) {
-    /* makes a file tail relative to the CWD, e.g., /var/games/minecraft/servers/myserver.
-       tails are used to get live-event reads on files.
-
-       if the server does not exist, a watch is made in the interim, waiting for its creation.
-       once the watch is satisfied, the watch is closed and a tail is finally created.
-    */
-    const abs_filepath = path.join(this.instance.env.cwd, rel_filepath);
-
-    if (rel_filepath in this.tails) {
-      logging.warn(
-        `[${this.instance.server_name}] Tail already exists for ${rel_filepath}`,
-      );
-      return;
-    }
-
-    try {
-      const new_tail = new Tail(abs_filepath);
-      logging.info(
-        `[${this.instance.server_name}] Created tail on ${rel_filepath}`,
-      );
-      new_tail.on('line', (data) => {
-        //logging.info(`[${this.instance.server_name}] ${rel_filepath}: transmitting new tail data`);
-        this.nsp.emit('tail_data', { filepath: rel_filepath, payload: data });
-      });
-      this.tails[rel_filepath] = new_tail;
-    } catch (e) {
-      logging.error(
-        `[${this.instance.server_name}] Create tail on ${rel_filepath} failed: `,
-        e,
-      );
-      if ((e as any).errno != -2) {
-        logging.error(e);
-        return; //exit execution to perhaps curb a runaway process
-      }
-      logging.info(
-        `[${this.instance.server_name}] Watching for file generation: ${rel_filepath}`,
-      );
-
-      const default_skips = [
-        'world',
-        'world_the_end',
-        'world_nether',
-        'dynmap',
-        'plugins',
-        'web',
-        'region',
-        'playerdata',
-        'stats',
-        'data',
-      ];
-      const fw = Fireworm(this.instance.env.cwd, {
-        skipDirEntryPatterns: default_skips,
-      });
-
-      fw.add(`**/${rel_filepath}`);
-      fw.on('add', (fp) => {
-        if (abs_filepath == fp) {
-          fw.clear();
-          logging.info(
-            `[${this.instance.server_name}] ${path.basename(fp)} created! Watchfile ${rel_filepath} closed`,
-          );
-          async.nextTick(() => {
-            this.make_tail(rel_filepath);
-          });
-        }
-      });
-    }
-  }
-
-  direct_dispatch(user, args) {
-    let fn, required_args;
-    const arg_array: any[] = [];
-    async.waterfall(
-      [
-        async.apply(this.instance.property, 'owner'),
-        (ownership_data, cb) => {
-          auth.test_membership(user, ownership_data.groupname, (is_valid) => {
-            cb(null, is_valid);
-          });
-        },
-        (is_valid, cb) => {
-          cb(!is_valid); //logical NOT'ted:  is_valid ? falsy error, !is_valid ? truthy error
-        },
-      ],
-      (err) => {
-        if (err) {
-          logging.error(
-            `User "${user}" does not have permissions on [${args.server_name}]:`,
-            args,
-          );
-        } else {
-          try {
-            fn = this.instance[args.command];
-            required_args = introspect(fn);
-            // receives an array of all expected arguments, using introspection.
-            // they are in order as listed by the function definition, which makes iteration possible.
-          } catch (e) {
-            args.success = false;
-            args.error = e;
-            args.time_resolved = Date.now();
-            this.nsp.emit('server_fin', args);
-            logging.error('server_fin', args);
-
-            return;
-          }
-
-          for (const i in required_args) {
-            // all callbacks expected to follow the pattern (success, payload).
-            if (required_args[i] == 'callback')
-              arg_array.push((err) => {
-                args.success = !err;
-                args.err = err;
-                args.time_resolved = Date.now();
-                this.nsp.emit('server_fin', args);
-                if (err)
-                  logging.error(
-                    `[${this.instance.server_name}] command "${args.command}" errored out:`,
-                    args,
-                  );
-                logging.info('server_fin', args);
-              });
-            else if (required_args[i] in args) {
-              arg_array.push(args[required_args[i]]);
-            } else {
-              args.success = false;
-              logging.error(
-                'Provided values missing required argument',
-                required_args[i],
-              );
-              args.error = `Provided values missing required argument: ${required_args[i]}`;
-              this.nsp.emit('server_fin', args);
-              return;
-            }
-          }
-
-          if (args.command == 'delete') this.cleanup();
-
-          logging.info(
-            `[${this.instance.server_name}] received request "${args.command}"`,
-          );
-          fn.apply(this.instance, arg_array);
-        }
-      },
-    );
-  }
-
   instance: mineos;
   nsp;
   tails = {};
@@ -1173,10 +897,10 @@ export class server_container {
   HEARTBEAT_INTERVAL_MS = 5000;
   COMMIT_INTERVAL_MIN = null;
 
-  constructor(server_name, user_config) {
+  constructor(server_name, user_config, socket) {
     // when evoked, creates a permanent 'mc' instance, namespace, and place for file tails.
     this.instance = new mineos(server_name, user_config.base_directory);
-    this.nsp = Socket.of(`/${server_name}`);
+    this.nsp = socket.of(`/${server_name}`);
 
     logging.info(`[${server_name}] Discovered server`);
 
@@ -1279,22 +1003,34 @@ export class server_container {
         const file_name = path.basename(fp);
         switch (file_name) {
           case 'server.properties':
-            setTimeout(this.broadcast_sp, FS_DELAY);
+            setTimeout(() => {
+              this.broadcast_sp;
+            }, FS_DELAY);
             break;
           case 'server.config':
-            setTimeout(this.broadcast_sc, FS_DELAY);
+            setTimeout(() => {
+              this.broadcast_sc;
+            }, FS_DELAY);
             break;
           case 'cron.config':
-            setTimeout(this.broadcast_cc, FS_DELAY);
+            setTimeout(() => {
+              this.broadcast_cc;
+            }, FS_DELAY);
             break;
           case 'eula.txt':
-            setTimeout(this.emit_eula, FS_DELAY);
+            setTimeout(() => {
+              this.emit_eula;
+            }, FS_DELAY);
             break;
           case 'server-icon.png':
-            setTimeout(this.broadcast_icon, FS_DELAY);
+            setTimeout(() => {
+              this.broadcast_icon;
+            }, FS_DELAY);
             break;
           case 'config.yml':
-            setTimeout(this.broadcast_cy, FS_DELAY);
+            setTimeout(() => {
+              this.broadcast_cy;
+            }, FS_DELAY);
             break;
         }
       };
@@ -1877,5 +1613,268 @@ export class server_container {
         },
       );
     }); //nsp on connect container ends
+  }
+
+  broadcast_to_lan(callback) {
+    async.waterfall(
+      [
+        async.apply(this.instance.verify, 'exists'),
+        async.apply(this.instance.verify, 'up'),
+        async.apply(this.instance.sc),
+        (sc_data, cb) => {
+          const broadcast_value = (sc_data.minecraft || {}).broadcast;
+          cb(!broadcast_value); //logically notted to make broadcast:true pass err cb
+        },
+        async.apply(this.instance.sp),
+      ],
+      (err, sp_data: any) => {
+        if (err) callback(null);
+        else {
+          const msg = Buffer.from(
+            '[MOTD]' +
+              sp_data.motd +
+              '[/MOTD][AD]' +
+              sp_data['server-port'] +
+              '[/AD]',
+          );
+          const server_ip = sp_data['server-ip'];
+          callback(msg, server_ip);
+        }
+      },
+    );
+  }
+
+  onreboot_start(callback) {
+    async.waterfall(
+      [
+        async.apply(this.instance.property, 'onreboot_start'),
+        (autostart, cb) => {
+          logging.info(
+            `[${this.instance.server_name}] autostart = ${autostart}`,
+          );
+          cb(!autostart); //logically NOT'ing so that autostart = true continues to next func
+        },
+        async.apply(this.instance.start),
+      ],
+      (err) => {
+        callback(err);
+      },
+    );
+  }
+
+  cleanup() {
+    for (const t in this.tails) this.tails[t].unwatch();
+
+    for (const i in this.intervals) clearInterval(this.intervals[i]);
+
+    this.nsp.removeAllListeners();
+  }
+
+  emit_eula() {
+    async.waterfall([
+      async.apply(this.instance.property, 'eula'),
+      (accepted, cb) => {
+        logging.info(
+          `[${this.instance.server_name}] eula.txt detected: ${accepted ? 'ACCEPTED' : 'NOT YET ACCEPTED'} (eula=${accepted})`,
+        );
+        this.nsp.emit('eula', accepted);
+        cb();
+      },
+    ]);
+  }
+
+  broadcast_icon() {
+    // function to encode file data to base64 encoded string
+    //http://www.hacksparrow.com/base64-encoding-decoding-in-node-js.html
+    const filepath = path.join(this.instance.env.cwd, 'server-icon.png');
+    fs.readFile(filepath, (err, data) => {
+      if (!err && data.toString('hex', 0, 4) == '89504e47')
+        //magic number for png first 4B
+        this.nsp.emit('server-icon.png', Buffer.from(data).toString('base64'));
+    });
+  }
+
+  broadcast_cy() {
+    // function to broadcast raw config.yml from bungeecord
+    const filepath = path.join(this.instance.env.cwd, 'config.yml');
+    fs.readFile(filepath, (err, data) => {
+      if (!err) this.nsp.emit('config.yml', Buffer.from(data).toString());
+    });
+  }
+
+  broadcast_notices() {
+    this.nsp.emit('notices', this.notices);
+  }
+
+  broadcast_sp() {
+    this.instance.sp((err, sp_data) => {
+      logging.debug(
+        `[${this.instance.server_name}] broadcasting server.properties`,
+      );
+      this.nsp.emit('server.properties', sp_data);
+    });
+  }
+
+  broadcast_sc() {
+    this.instance.sc((err, sc_data) => {
+      logging.debug(
+        `[${this.instance.server_name}] broadcasting server.config`,
+      );
+      if (!err) this.nsp.emit('server.config', sc_data);
+    });
+  }
+
+  broadcast_cc() {
+    this.instance.crons((err, cc_data) => {
+      logging.debug(`[${this.instance.server_name}] broadcasting cron.config`);
+      if (!err) this.nsp.emit('cron.config', cc_data);
+    });
+  }
+
+  make_tail(rel_filepath) {
+    /* makes a file tail relative to the CWD, e.g., /var/games/minecraft/servers/myserver.
+       tails are used to get live-event reads on files.
+
+       if the server does not exist, a watch is made in the interim, waiting for its creation.
+       once the watch is satisfied, the watch is closed and a tail is finally created.
+    */
+    const abs_filepath = path.join(this.instance.env.cwd, rel_filepath);
+
+    if (rel_filepath in this.tails) {
+      logging.warn(
+        `[${this.instance.server_name}] Tail already exists for ${rel_filepath}`,
+      );
+      return;
+    }
+
+    try {
+      const new_tail = new Tail(abs_filepath);
+      logging.info(
+        `[${this.instance.server_name}] Created tail on ${rel_filepath}`,
+      );
+      new_tail.on('line', (data) => {
+        //logging.info(`[${this.instance.server_name}] ${rel_filepath}: transmitting new tail data`);
+        this.nsp.emit('tail_data', { filepath: rel_filepath, payload: data });
+      });
+      this.tails[rel_filepath] = new_tail;
+    } catch (e) {
+      logging.error(
+        `[${this.instance.server_name}] Create tail on ${rel_filepath} failed: `,
+        e,
+      );
+      if ((e as any).errno != -2) {
+        logging.error(e);
+        return; //exit execution to perhaps curb a runaway process
+      }
+      logging.info(
+        `[${this.instance.server_name}] Watching for file generation: ${rel_filepath}`,
+      );
+
+      const default_skips = [
+        'world',
+        'world_the_end',
+        'world_nether',
+        'dynmap',
+        'plugins',
+        'web',
+        'region',
+        'playerdata',
+        'stats',
+        'data',
+      ];
+      const fw = Fireworm(this.instance.env.cwd, {
+        skipDirEntryPatterns: default_skips,
+      });
+
+      fw.add(`**/${rel_filepath}`);
+      fw.on('add', (fp) => {
+        if (abs_filepath == fp) {
+          fw.clear();
+          logging.info(
+            `[${this.instance.server_name}] ${path.basename(fp)} created! Watchfile ${rel_filepath} closed`,
+          );
+          async.nextTick(() => {
+            this.make_tail(rel_filepath);
+          });
+        }
+      });
+    }
+  }
+
+  direct_dispatch(user, args) {
+    let fn, required_args;
+    const arg_array: any[] = [];
+    async.waterfall(
+      [
+        async.apply(this.instance.property, 'owner'),
+        (ownership_data, cb) => {
+          auth.test_membership(user, ownership_data.groupname, (is_valid) => {
+            cb(null, is_valid);
+          });
+        },
+        (is_valid, cb) => {
+          cb(!is_valid); //logical NOT'ted:  is_valid ? falsy error, !is_valid ? truthy error
+        },
+      ],
+      (err) => {
+        if (err) {
+          logging.error(
+            `User "${user}" does not have permissions on [${args.server_name}]:`,
+            args,
+          );
+        } else {
+          try {
+            fn = this.instance[args.command];
+            required_args = introspect(fn);
+            // receives an array of all expected arguments, using introspection.
+            // they are in order as listed by the function definition, which makes iteration possible.
+          } catch (e) {
+            args.success = false;
+            args.error = e;
+            args.time_resolved = Date.now();
+            this.nsp.emit('server_fin', args);
+            logging.error('server_fin', args);
+
+            return;
+          }
+
+          for (const i in required_args) {
+            // all callbacks expected to follow the pattern (success, payload).
+            if (required_args[i] == 'callback')
+              arg_array.push((err) => {
+                args.success = !err;
+                args.err = err;
+                args.time_resolved = Date.now();
+                this.nsp.emit('server_fin', args);
+                if (err)
+                  logging.error(
+                    `[${this.instance.server_name}] command "${args.command}" errored out:`,
+                    args,
+                  );
+                logging.info('server_fin', args);
+              });
+            else if (required_args[i] in args) {
+              arg_array.push(args[required_args[i]]);
+            } else {
+              args.success = false;
+              logging.error(
+                'Provided values missing required argument',
+                required_args[i],
+              );
+              args.error = `Provided values missing required argument: ${required_args[i]}`;
+              this.nsp.emit('server_fin', args);
+              return;
+            }
+          }
+
+          if (args.command == 'delete') this.cleanup();
+
+          logging.info(
+            `[${this.instance.server_name}] received request "${args.command}"`,
+          );
+          fn.apply(this.instance, arg_array);
+        }
+      },
+    );
   }
 }

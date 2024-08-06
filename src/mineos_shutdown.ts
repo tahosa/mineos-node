@@ -1,17 +1,9 @@
 #!/usr/bin/env node
 
-import mineos, { server_list_up } from './mineos';
-import * as fs from 'fs-extra';
-import * as ini from 'ini';
+import fs from 'fs-extra';
 
-function read_ini(filepath) {
-  try {
-    const data = fs.readFileSync(filepath);
-    return ini.parse(data.toString());
-  } catch (e) {
-    return null;
-  }
-}
+import mineos, { server_list_up } from './mineos';
+import { readIni } from './util';
 
 console.log('Stopping running games');
 
@@ -20,7 +12,7 @@ const servers = server_list_up();
 
 // Read base directory configurations
 const mineos_config =
-  read_ini('/etc/mineos.conf') || read_ini('/usr/local/etc/mineos.conf') || {};
+  readIni('/etc/mineos.conf') || readIni('/usr/local/etc/mineos.conf') || {};
 let base_directory = '/var/games/minecraft';
 
 if ('base_directory' in mineos_config) {

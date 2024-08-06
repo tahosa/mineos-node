@@ -1,11 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env ts-node
+import 'node:process';
 
-import { dependencies } from './mineos';
-import server from './server';
 import async from 'async';
 import fs from 'fs-extra';
 import getopt from 'node-getopt';
-
 import express from 'express';
 import compression from 'compression';
 import passport from 'passport';
@@ -18,17 +16,19 @@ import cookieParser from 'cookie-parser';
 import token from 'crypto';
 import http from 'node:http';
 import https from 'node:https';
-import auth from './auth';
+import path from 'node:path';
 import socket from 'socket.io';
+
+import auth from './auth';
+import { checkDependencies } from './mineos';
 import { readIni } from './util';
-import 'node:process';
+import server from './server';
 
 let SOCKET_PORT: number = 8080;
 
 const sessionStore = new expressSession.MemoryStore();
 const app = express();
 let httpServer: http.Server | https.Server = new http.Server(app);
-const response_options = { root: __dirname };
 
 const opt = getopt
   .create([
@@ -160,233 +160,231 @@ io.use(
   passportSocketIO.authorize({
     cookieParser: cookieParser, // the same middleware you registrer in express
     key: 'express.sid', // the name of the cookie where express/connect stores its session_id
-    secret: token, // the session_secret to parse the cookie
+    secret, // the session_secret to parse the cookie
     store: sessionStore, // we NEED to use a sessionstore. no memorystore please
   }),
 );
 
-dependencies((err, binaries) => {
-  if (err) {
-    console.error('MineOS is missing dependencies:', err);
-    console.log(binaries);
-    process.exit(1);
-  }
+try {
+  checkDependencies();
+} catch (err) {
+  console.error('MineOS is missing dependencies:', err);
+  process.exit(1);
+}
 
-  const config_locs = [
-    'custom.conf',
-    '/etc/mineos.conf',
-    '/usr/local/etc/mineos.conf',
-  ];
+const config_locs = [
+  'custom.conf',
+  './mineos.conf',
+  '/etc/mineos.conf',
+  '/usr/local/etc/mineos.conf',
+];
 
-  let mineos_config;
-  if (typeof config_file !== 'undefined') {
-    console.info(
-      'using command-line provided configuration identified as',
-      config_file,
-    );
-    mineos_config = readIni(config_file);
-  } else {
-    for (const loc in config_locs) {
-      try {
-        fs.statSync(config_locs[loc]);
-        console.info(
-          'first mineos configuration identified as',
-          config_locs[loc],
-        );
-        mineos_config = readIni(config_locs[loc]);
-        break;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  }
-
-  let base_directory = '/var/games/minecraft';
-
-  if ('base_directory' in mineos_config) {
+let mineos_config;
+if (typeof config_file !== 'undefined') {
+  console.info(
+    'using command-line provided configuration identified as',
+    config_file,
+  );
+  mineos_config = readIni(config_file);
+} else {
+  for (const loc in config_locs) {
     try {
-      if (mineos_config['base_directory'].length < 2)
-        throw new Error('Invalid base_directory length.');
-
-      base_directory = mineos_config['base_directory'];
-      fs.ensureDirSync(base_directory);
+      fs.statSync(config_locs[loc]);
+      console.info(
+        'first mineos configuration identified as',
+        config_locs[loc],
+      );
+      mineos_config = readIni(config_locs[loc]);
+      break;
     } catch (e) {
-      console.error(e, 'Aborting startup.');
-      process.exit(2);
+      console.error(e);
     }
-    console.info('using base_directory: ', base_directory);
-  } else {
-    console.error('base_directory not specified--missing mineos.conf?');
-    console.error(
-      'alternatively, you can make custom.conf in the repository root directory',
-    );
-    console.error('Aborting startup.');
-    process.exit(4);
   }
+}
 
-  const be = new server(base_directory, io, mineos_config);
+let base_directory = '/var/games/minecraft';
 
-  app.get('/', (req, res) => {
-    res.redirect('/admin/index.html');
-  });
+if ('base_directory' in mineos_config) {
+  try {
+    if (mineos_config['base_directory'].length < 2)
+      throw new Error('Invalid base_directory length.');
 
-  app.get('/admin/index.html', ensureAuthenticated, (req, res) => {
-    res.sendFile('/html/index.html', response_options);
-  });
-
-  app.get('/login', (req, res) => {
-    res.sendFile('/html/login.html');
-  });
-
-  app.post(
-    '/auth',
-    passport.authenticate('local-signin', {
-      successRedirect: '/admin/index.html',
-      failureRedirect: '/admin/login.html',
-    }),
-  );
-
-  app.all('/api/:server_name/:command', ensureAuthenticated, (req, res) => {
-    const target_server = req.params.server_name;
-    const user = (req.user as any).username;
-    const instance = be.servers[target_server];
-
-    const args = req.body;
-    args['command'] = req.params.command;
-
-    if (instance) instance.direct_dispatch(user, args);
-    else
-      console.error(
-        'Ignoring request by "',
-        user,
-        '"; no server found named [',
-        target_server,
-        ']',
-      );
-
-    res.end();
-  });
-
-  app.post('/admin/command', ensureAuthenticated, (req, res) => {
-    const target_server = req.body.server_name;
-    const instance = be.servers[target_server];
-    const user = (req.user as any).username;
-
-    if (instance) instance.direct_dispatch(user, req.body);
-    else
-      console.error(
-        'Ignoring request by "',
-        user,
-        '"; no server found named [',
-        target_server,
-        ']',
-      );
-
-    res.end();
-  });
-
-  app.get('/logout', (req, res) => {
-    req.logout(() => {});
-    res.redirect('/admin/login.html');
-  });
-
-  app.use('/socket.io', express.static(__dirname + '/node_modules/socket.io'));
-  app.use('/angular', express.static(__dirname + '/node_modules/angular'));
-  app.use(
-    '/angular-translate',
-    express.static(__dirname + '/node_modules/angular-translate/dist'),
-  );
-  app.use('/moment', express.static(__dirname + '/node_modules/moment'));
-  app.use(
-    '/angular-moment',
-    express.static(__dirname + '/node_modules/angular-moment'),
-  );
-  app.use(
-    '/angular-moment-duration-format',
-    express.static(__dirname + '/node_modules/moment-duration-format/lib'),
-  );
-  app.use(
-    '/angular-sanitize',
-    express.static(__dirname + '/node_modules/angular-sanitize'),
-  );
-  app.use('/admin', express.static(__dirname + '/html'));
-
-  process.on('SIGINT', () => {
-    console.log('Caught interrupt signal; closing webui....');
-    be.shutdown();
-    process.exit();
-  });
-
-  let SOCKET_HOST = '0.0.0.0';
-  let USE_HTTPS = true;
-
-  if ('use_https' in mineos_config) USE_HTTPS = mineos_config['use_https'];
-
-  if ('socket_host' in mineos_config)
-    SOCKET_HOST = mineos_config['socket_host'];
-
-  if ('socket_port' in mineos_config)
-    SOCKET_PORT = mineos_config['socket_port'];
-  else if (USE_HTTPS) SOCKET_PORT = 8443;
-  else SOCKET_PORT = 8080;
-
-  if (USE_HTTPS) {
-    const keyfile =
-      mineos_config['ssl_private_key'] || '/etc/ssl/certs/mineos.key';
-    const certfile =
-      mineos_config['ssl_certificate'] || '/etc/ssl/certs/mineos.crt';
-    async.parallel(
-      {
-        key: async.apply(fs.readFile, keyfile),
-        cert: async.apply(fs.readFile, certfile),
-      },
-      (err, ssl) => {
-        if (err) {
-          console.error(
-            'Could not locate required SSL files ' +
-              keyfile +
-              ' and/or ' +
-              certfile +
-              ', aborting server start.',
-          );
-          process.exit(3);
-        } else {
-          if ('ssl_cert_chain' in mineos_config) {
-            try {
-              const cert_chain_data = fs.readFileSync(
-                mineos_config['ssl_cert_chain'],
-              );
-              if (cert_chain_data.length) ssl['ca'] = cert_chain_data;
-            } catch (e) {
-              console.error(e);
-            }
-          }
-
-          httpServer = https
-            .createServer(ssl, app)
-            .listen(SOCKET_PORT, SOCKET_HOST, () => {
-              io.attach(httpServer, {});
-              console.log(
-                'MineOS webui listening on HTTPS://' +
-                  SOCKET_HOST +
-                  ':' +
-                  SOCKET_PORT,
-              );
-            });
-        }
-      },
-    );
-  } else {
-    console.warn('mineos.conf set to host insecurely: starting HTTP server.');
-    httpServer.listen(SOCKET_PORT, SOCKET_HOST, () => {
-      console.log(
-        'MineOS webui listening on HTTP://' + SOCKET_HOST + ':' + SOCKET_PORT,
-      );
-    });
+    base_directory = mineos_config['base_directory'];
+    fs.ensureDirSync(base_directory);
+  } catch (e) {
+    console.error(e, 'Aborting startup.');
+    process.exit(2);
   }
+  console.info('using base_directory: ', base_directory);
+} else {
+  console.error('base_directory not specified--missing mineos.conf?');
+  console.error(
+    'alternatively, you can make custom.conf in the repository root directory',
+  );
+  console.error('Aborting startup.');
+  process.exit(4);
+}
 
-  setInterval(session_cleanup, 3600000); //check for expired sessions every hour
+const be = new server(base_directory, io, mineos_config);
+
+app.get('/', (req, res) => {
+  res.redirect('/admin/index.html');
 });
+
+app.get('/admin/index.html', ensureAuthenticated, (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../html/index.html'));
+});
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../html/login.html'));
+});
+
+app.post(
+  '/auth',
+  passport.authenticate('local-signin', {
+    successRedirect: '/admin/index.html',
+    failureRedirect: '/admin/login.html',
+  }),
+);
+
+app.all('/api/:server_name/:command', ensureAuthenticated, (req, res) => {
+  const target_server = req.params.server_name;
+  const user = (req.user as any).username;
+  const instance = be.servers[target_server];
+
+  const args = req.body;
+  args['command'] = req.params.command;
+
+  if (instance) instance.direct_dispatch(user, args);
+  else
+    console.error(
+      'Ignoring request by "',
+      user,
+      '"; no server found named [',
+      target_server,
+      ']',
+    );
+
+  res.end();
+});
+
+app.post('/admin/command', ensureAuthenticated, (req, res) => {
+  const target_server = req.body.server_name;
+  const instance = be.servers[target_server];
+  const user = (req.user as any).username;
+
+  if (instance) instance.direct_dispatch(user, req.body);
+  else
+    console.error(
+      'Ignoring request by "',
+      user,
+      '"; no server found named [',
+      target_server,
+      ']',
+    );
+
+  res.end();
+});
+
+app.get('/logout', (req, res) => {
+  req.logout(() => {});
+  res.redirect('/admin/login.html');
+});
+
+app.use('/socket.io', express.static(__dirname + '/../node_modules/socket.io'));
+app.use('/angular', express.static(__dirname + '/../node_modules/angular'));
+app.use(
+  '/angular-translate',
+  express.static(__dirname + '/../node_modules/angular-translate/dist'),
+);
+app.use('/moment', express.static(__dirname + '/../node_modules/moment'));
+app.use(
+  '/angular-moment',
+  express.static(__dirname + '/../node_modules/angular-moment'),
+);
+app.use(
+  '/angular-moment-duration-format',
+  express.static(__dirname + '/../node_modules/moment-duration-format/lib'),
+);
+app.use(
+  '/angular-sanitize',
+  express.static(__dirname + '/../node_modules/angular-sanitize'),
+);
+app.use('/admin', express.static(__dirname + '/../html'));
+
+process.on('SIGINT', () => {
+  console.log('Caught interrupt signal; closing webui....');
+  be.shutdown();
+  process.exit();
+});
+
+let SOCKET_HOST = '0.0.0.0';
+let USE_HTTPS = true;
+
+if ('use_https' in mineos_config) USE_HTTPS = mineos_config['use_https'];
+
+if ('socket_host' in mineos_config) SOCKET_HOST = mineos_config['socket_host'];
+
+if ('socket_port' in mineos_config) SOCKET_PORT = mineos_config['socket_port'];
+else if (USE_HTTPS) SOCKET_PORT = 8443;
+else SOCKET_PORT = 8080;
+
+if (USE_HTTPS) {
+  const keyfile =
+    mineos_config['ssl_private_key'] || '/etc/ssl/certs/mineos.key';
+  const certfile =
+    mineos_config['ssl_certificate'] || '/etc/ssl/certs/mineos.crt';
+  async.parallel(
+    {
+      key: async.apply(fs.readFile, keyfile),
+      cert: async.apply(fs.readFile, certfile),
+    },
+    (err, ssl) => {
+      if (err) {
+        console.error(
+          'Could not locate required SSL files ' +
+            keyfile +
+            ' and/or ' +
+            certfile +
+            ', aborting server start.',
+        );
+        process.exit(3);
+      } else {
+        if ('ssl_cert_chain' in mineos_config) {
+          try {
+            const cert_chain_data = fs.readFileSync(
+              mineos_config['ssl_cert_chain'],
+            );
+            if (cert_chain_data.length) ssl['ca'] = cert_chain_data;
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        httpServer = https
+          .createServer(ssl, app)
+          .listen(SOCKET_PORT, SOCKET_HOST, () => {
+            io.attach(httpServer, {});
+            console.log(
+              'MineOS webui listening on HTTPS://' +
+                SOCKET_HOST +
+                ':' +
+                SOCKET_PORT,
+            );
+          });
+      }
+    },
+  );
+} else {
+  console.warn('mineos.conf set to host insecurely: starting HTTP server.');
+  httpServer.listen(SOCKET_PORT, SOCKET_HOST, () => {
+    console.log(
+      'MineOS webui listening on HTTP://' + SOCKET_HOST + ':' + SOCKET_PORT,
+    );
+  });
+}
+
+setInterval(session_cleanup, 3600000); //check for expired sessions every hour
 
 process.on('uncaughtExceptionMonitor', (err) => {
   // Monitor but allow unhandled excaptions to fall through

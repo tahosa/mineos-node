@@ -1,3 +1,3 @@
 import papertemplate from './papertemplate';
 
-export default { profile: papertemplate('paper') };
+export default papertemplate('paper');

@@ -1,10 +1,10 @@
 import * as child_process from 'child_process';
-import { sync } from 'which';
+import which from 'which';
 
 export async function usedJavaVersion(sc, callback) {
   let value;
   try {
-    const java_binary = sync('java');
+    const java_binary = which.sync('java');
     value = (sc.java || {}).java_binary || java_binary;
 
     const java_version = child_process.spawnSync(`${value}`, ['-version']);
