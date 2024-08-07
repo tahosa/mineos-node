@@ -88,7 +88,6 @@ export default {
       p.push(JSON.parse(JSON.stringify(item)));
     } catch (e) {
       console.error(e);
-      throw e;
     }
 
     return p;
@@ -98,7 +97,7 @@ export default {
     const args = ['--force-local', '-xf', dest_filepath];
     const params = { cwd: profile_dir };
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
       async.series(
         [
           (cb) => {
@@ -127,7 +126,7 @@ export default {
         ],
         (err) => {
           if (err) {
-            reject(err);
+            console.error(err);
           }
           resolve();
         },

@@ -15,6 +15,8 @@ export default {
 
     try {
       xml_parser.parseString(body, (inner_err, result) => {
+        if (inner_err) throw inner_err;
+
         try {
           const packs =
             result['metadata']['versioning'][0]['versions'][0]['version'];
@@ -27,6 +29,10 @@ export default {
 
             item['version'] = packs[index];
             item['group'] = 'spongevanilla';
+
+            if (!matches || matches.length < 5) {
+              continue;
+            }
 
             switch (matches[3]) {
               case 'DEV':
@@ -53,15 +59,12 @@ export default {
               `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${item.version}/spongevanilla-${item.version}.jar`;
             p.push(item);
           }
-          throw inner_err;
         } catch (e) {
           console.error(e);
-          throw e;
         }
       });
     } catch (e) {
       console.error(e);
-      throw e;
     }
 
     return p;

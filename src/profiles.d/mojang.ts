@@ -1,9 +1,27 @@
-import async from 'async';
+import axios from 'axios';
 import path from 'path';
 import fs from 'fs-extra';
-import request from 'request';
+
+import { PromisePool } from '../util';
 
 import profile, { type collection } from './template';
+
+type MojangVersion = {
+  id: string
+  type: string
+  url: string
+  time: string
+  releaseTime: string
+};
+
+type MojanDetails = {
+  id: string
+  downloads: {
+    server: {
+      url: string
+    }
+  }
+};
 
 export default {
   name: 'Mojang Official Minecraft Jars',
@@ -12,86 +30,44 @@ export default {
     type: 'json',
   },
   handler: async (profile_dir, body) => {
-    const p: profile[] = [];
+    const promise = new PromisePool<profile, MojangVersion>(body.versions as MojangVersion[], 2, async (version) => {
+      let type: profile['type'] = 'old_version';
 
-    return new Promise<profile[]>((resolve, reject) => {
-      const q = async.queue((obj: { url: string; id?: string }, cb) => {
-        async.waterfall([
-          async.apply(request, obj.url),
-          (response, body, inner_cb) => {
-            inner_cb(response.statusCode != 200, body);
-          },
-          (body, inner_cb) => {
-            let parsed: any;
-            try {
-              parsed = JSON.parse(body);
-            } catch (err) {
-              inner_cb(err);
-              return;
-            }
-            for (const idx in p)
-              if (p[idx]['id'] == obj['id'])
-                try {
-                  p[idx]['url'] = parsed['downloads']['server']['url'];
-                } catch (e) {
-                  console.error(e);
-                }
-            inner_cb();
-          },
-        ]);
-        cb();
-      }, 2);
-
-      q.pause();
-
-      try {
-        // BEGIN PARSING LOGIC
-        for (const index in body.versions) {
-          const item = new profile();
-          const ref_obj = body.versions[index];
-
-          item['id'] = ref_obj['id'];
-          item['time'] = ref_obj['time'];
-          item['releaseTime'] = ref_obj['releaseTime'];
-          item['group'] = 'mojang';
-          item['webui_desc'] = 'Official Mojang Jar';
-          item['weight'] = 0;
-          item['filename'] = `minecraft_server.${ref_obj['id']}.jar`;
-          item['downloaded'] = fs.existsSync(
-            path.join(profile_dir, item.id || '', item.filename),
-          );
-          item['version'] = ref_obj['id'];
-          item['release_version'] = ref_obj['id'];
-          item['url'] =
-            `https://s3.amazonaws.com/Minecraft.Download/versions/${item.version}/minecraft_server.${item.version}.jar`;
-
-          switch (ref_obj['type']) {
-            case 'release':
-              item['type'] = ref_obj['type'];
-              q.push({ id: item['id'], url: ref_obj.url });
-              p.push(item);
-              break;
-            case 'snapshot':
-              item['type'] = ref_obj['type'];
-              q.push({ id: item['id'], url: ref_obj.url });
-              p.push(item);
-              break;
-            default:
-              item['type'] = 'old_version'; //old_alpha, old_beta
-              //q.push({ id: item['id'], url: ref_obj.url });
-              break;
-          }
-          //p.push(item);
-        }
-      } catch (e) {
-        console.error(e);
-        reject(e);
+      switch (version.type) {
+        case 'release':
+          type = 'release';
+          break;
+        case 'snapshot':
+          type = 'snapshot';
+          break;
       }
 
-      q.resume();
-      q.drain = async () => {
-        resolve(p);
+      const id = version.id;
+      const filename = `minecraft_server.${version.id}.jar`;
+
+      let url = `https://s3.amazonaws.com/Minecraft.Download/versions/${id}/minecraft_server.${id}.jar`
+      const details = await axios<MojanDetails>({ url: version.url })
+      if (details.data.id === version.id) {
+        url = details.data.downloads.server.url;
+      }
+
+      const item: profile = {
+        id,
+        type,
+        time: Date.parse(version.time),
+        releaseTime: Date.parse(version.releaseTime),
+        group: 'mojang',
+        webui_desc: 'Official Mojang Jar',
+        weight: 0,
+        filename,
+        downloaded: fs.existsSync(path.join(profile_dir, id, filename)),
+        version: id,
+        url
       };
+
+      return item;
     });
-  }, //end handler
+
+    return promise.process();
+  }
 } as collection;

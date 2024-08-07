@@ -30,7 +30,6 @@ export default {
       p.push(item);
     } catch (e) {
       console.error(e);
-      throw e;
     }
 
     return p;

@@ -71,7 +71,6 @@ export default {
       }); // end parseString
     } catch (e) {
       console.error(e);
-      throw e;
     }
 
     return p;

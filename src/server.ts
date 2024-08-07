@@ -1,3 +1,6 @@
+import type profile from './profiles.d/template';
+import { type collection } from './profiles.d/template';
+
 import Socket from 'socket.io';
 import axios from 'axios';
 import async from 'async';
@@ -29,7 +32,7 @@ import hash from 'object-hash';
 import auth from './auth';
 import mineos, { DIRS } from './mineos';
 import PROFILES from './profiles';
-import type profile from './profiles.d/template';
+import { PromisePool } from './util';
 
 const SOURCES = PROFILES.profile_manifests;
 const F_OK = constants.F_OK;
@@ -770,11 +773,10 @@ export default class server {
       this.front_end.emit('profile_list', this.profiles);
     else {
       const profile_dir = path.join(this.base_dir, DIRS['profiles']);
-      // const SIMULTANEOUS_DOWNLOADS = 3; // TODO: figure out promise pooling
-      let profiles: profile[] = [];
-
-      await Promise.all(
-        Object.entries(SOURCES).map(async ([name, profile]) => {
+      const pool = new PromisePool<profile[], [string, collection]>(
+        Object.entries(SOURCES),
+        3,
+        async ([name, profile]) => {
           try {
             let output: profile[] = [];
             if (profile.request_args) {
@@ -784,9 +786,7 @@ export default class server {
               if (response.status != 200) {
                 throw new Error(`${response.data}`);
               } else {
-                output = await profile
-                  .handler(profile_dir, response.data)
-                  .catch((err) => err);
+                output = await profile.handler(profile_dir, response.data);
               }
             } else {
               output = await profile.handler(profile_dir);
@@ -795,16 +795,16 @@ export default class server {
             logging.info(
               `Downloaded information for collection: ${name} (${output.length} entries)`,
             );
-            profiles = profiles.concat(output);
+            return output;
           } catch (e) {
             logging.error(
               `Unable to retrieve profile: ${name}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`,
             );
+            return [];
           }
-        }),
-      );
+      });
 
-      this.profiles = profiles;
+      this.profiles = (await pool.process()).flat();
       this.front_end.emit('profile_list', this.profiles);
     }
   }

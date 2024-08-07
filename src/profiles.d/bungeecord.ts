@@ -16,6 +16,8 @@ export default {
 
     try {
       xml_parser.parseString(body, (inner_err, result) => {
+        if (inner_err) throw inner_err;
+
         const packs = result['feed']['entry'];
 
         for (const index in packs) {
@@ -36,11 +38,9 @@ export default {
           p.push(item);
           weight++;
         }
-        throw inner_err;
       });
     } catch (e) {
       console.log(e);
-      throw e;
     }
 
     return p;

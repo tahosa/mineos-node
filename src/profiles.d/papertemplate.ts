@@ -60,7 +60,6 @@ export default (name) => {
         });
       } catch (e) {
         console.log(e);
-        throw e;
       }
     }, //end handler
   } as collection;

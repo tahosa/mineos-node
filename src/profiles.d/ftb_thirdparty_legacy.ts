@@ -69,7 +69,6 @@ export default {
       });
     } catch (e) {
       console.error(e);
-      throw e;
     }
 
     return p;
