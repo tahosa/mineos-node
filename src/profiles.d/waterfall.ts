@@ -1,3 +1,3 @@
-import papertemplate from './papertemplate';
+import papertemplate from './papertemplate.js';
 
 export default papertemplate('waterfall');

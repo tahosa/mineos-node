@@ -5,7 +5,6 @@ import async from 'async';
 import child_process from 'child_process';
 import which from 'which';
 import logging from 'winston';
-import { usedJavaVersion } from './java';
 import ini from 'ini';
 import DecompressZip from 'decompress-zip';
 import mcquery from 'mcquery';
@@ -17,8 +16,10 @@ import procfs from 'procfs-stats';
 import du from 'du';
 import net from 'net';
 import tmp from 'tmp';
-import auth from './auth';
 import chownr from 'chownr';
+
+import auth from './auth.js';
+import { usedJavaVersion } from './java.js';
 
 const F_OK = constants.F_OK;
 

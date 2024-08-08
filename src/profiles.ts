@@ -1,20 +1,20 @@
-import bedrockServer from './profiles.d/bedrock-server';
-import bedrockWrapper from './profiles.d/bedrock-wrapper';
-import bungeecord from './profiles.d/bungeecord';
-import cuberite from './profiles.d/cuberite';
-import forge from './profiles.d/forge';
-import ftb_legacy from './profiles.d/ftb_legacy';
-import ftb_thirdparty_legacy from './profiles.d/ftb_thirdparty_legacy';
-import imagicalmine from './profiles.d/imagicalmine';
-import mianite from './profiles.d/mianite';
-import mojang from './profiles.d/mojang';
-import nukkit from './profiles.d/nukkit';
-import paperspigot from './profiles.d/paperspigot';
-import spigot from './profiles.d/spigot';
-import spongevanilla from './profiles.d/spongevanilla';
-import { collection } from './profiles.d/template';
-import travertine from './profiles.d/travertine';
-import waterfall from './profiles.d/waterfall';
+import bedrockServer from './profiles.d/bedrock-server.js';
+import bedrockWrapper from './profiles.d/bedrock-wrapper.js';
+import bungeecord from './profiles.d/bungeecord.js';
+import cuberite from './profiles.d/cuberite.js';
+import forge from './profiles.d/forge.js';
+import ftb_legacy from './profiles.d/ftb_legacy.js';
+import ftb_thirdparty_legacy from './profiles.d/ftb_thirdparty_legacy.js';
+import imagicalmine from './profiles.d/imagicalmine.js';
+import mianite from './profiles.d/mianite.js';
+import mojang from './profiles.d/mojang.js';
+import nukkit from './profiles.d/nukkit.js';
+import paperspigot from './profiles.d/paperspigot.js';
+import spigot from './profiles.d/spigot.js';
+import spongevanilla from './profiles.d/spongevanilla.js';
+import { collection } from './profiles.d/template.js';
+import travertine from './profiles.d/travertine.js';
+import waterfall from './profiles.d/waterfall.js';
 
 export default {
   profile_manifests: {

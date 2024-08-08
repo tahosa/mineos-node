@@ -2,13 +2,25 @@ import fs from 'node:fs';
 import ini from 'ini';
 import { EventEmitter } from 'node:stream';
 
-export const readIni = (filepath: string): { [key: string]: any } => {
+import { Logger } from './logger.js';
+
+const logger = Logger('util');
+
+export const readIni = (
+  filepath: string,
+  clearOnError = false,
+): { [key: string]: any } | undefined => {
   try {
     const data = fs.readFileSync(filepath);
     return ini.parse(data.toString());
   } catch (e) {
-    console.error(e);
-    return {};
+    logger.warn(`error reading ini file ${filepath}`, e);
+
+    if (clearOnError) {
+      fs.writeFileSync(filepath, '');
+    }
+
+    return;
   }
 };
 
@@ -28,10 +40,14 @@ export class PromisePool<T, I> {
   errors: [I, Error][] = [];
   processed: number = 0;
   inFlight: number = 0;
-  promise: Promise<T[]> | null = null
+  promise: Promise<T[]> | null = null;
   eventEmitter: EventEmitter = new EventEmitter();
 
-  constructor(data: I[], concurrency: number, processor: (data: I) => Promise<T>) {
+  constructor(
+    data: I[],
+    concurrency: number,
+    processor: (data: I) => Promise<T>,
+  ) {
     this.data = data;
     this.concurrancy = concurrency;
     this.processor = processor;
@@ -69,9 +85,8 @@ export class PromisePool<T, I> {
         rej(e);
       }
     });
-    return this.promise
+    return this.promise;
   }
-
 
   /**
    * Process a single record and emit an event when complete.
@@ -102,7 +117,7 @@ export class PromisePool<T, I> {
     if (this.inFlight >= this.concurrancy) {
       return new Promise((res) => {
         this.eventEmitter.once(PromisePool.TASK_COMPLETED, res);
-      })
+      });
     } else {
       return Promise.resolve();
     }

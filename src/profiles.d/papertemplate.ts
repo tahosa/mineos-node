@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 
-import profile, { type collection } from './template';
+import profile, { type collection } from './template.js';
 
 export default (name) => {
   const lowername = name.toLowerCase();

@@ -2,8 +2,8 @@
 
 import fs from 'fs-extra';
 
-import mineos, { server_list_up } from './mineos';
-import { readIni } from './util';
+import mineos, { server_list_up } from './mineos.js';
+import { readIni } from './util.js';
 
 console.log('Stopping running games');
 

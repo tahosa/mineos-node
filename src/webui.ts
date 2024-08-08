@@ -19,10 +19,10 @@ import https from 'node:https';
 import path from 'node:path';
 import socket from 'socket.io';
 
-import auth from './auth';
-import { checkDependencies } from './mineos';
-import { readIni } from './util';
-import server from './server';
+import auth from './auth.js';
+import { checkDependencies } from './mineos.js';
+import { readIni } from './util.js';
+import server from './server.js';
 
 let SOCKET_PORT: number = 8080;
 

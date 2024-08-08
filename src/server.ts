@@ -1,5 +1,5 @@
-import type profile from './profiles.d/template';
-import { type collection } from './profiles.d/template';
+import type profile from './profiles.d/template.js';
+import { type collection } from './profiles.d/template.js';
 
 import Socket from 'socket.io';
 import axios from 'axios';
@@ -14,7 +14,7 @@ import which from 'which';
 import child from 'child_process';
 import rsync from 'rsync';
 import dgram from 'dgram';
-import Fireworm from 'fireworm/index';
+import Fireworm from 'fireworm/index.js';
 import request from 'request';
 import userid from 'userid';
 import progress from 'request-progress';
@@ -29,18 +29,19 @@ import { CronJob } from 'cron';
 import { randomUUID } from 'node:crypto';
 import hash from 'object-hash';
 
-import auth from './auth';
-import mineos, { DIRS } from './mineos';
-import PROFILES from './profiles';
-import { PromisePool } from './util';
+import auth from './auth.js';
+import mineos, { DIRS } from './mineos.js';
+import PROFILES from './profiles.js';
+import { PromisePool } from './util.js';
 
 const SOURCES = PROFILES.profile_manifests;
 const F_OK = constants.F_OK;
 
 logging.add(
   new logging.transports.File({
-    filename: '/home/rlcrock/mineos/mineos.log',
+    filename: '/var/log/mineos.log',
     handleExceptions: true,
+    level: 'debug',
   }),
 );
 
@@ -802,7 +803,8 @@ export default class server {
             );
             return [];
           }
-      });
+        },
+      );
 
       this.profiles = (await pool.process()).flat();
       this.front_end.emit('profile_list', this.profiles);
@@ -1004,32 +1006,32 @@ export class server_container {
         switch (file_name) {
           case 'server.properties':
             setTimeout(() => {
-              this.broadcast_sp;
+              this.broadcast_sp();
             }, FS_DELAY);
             break;
           case 'server.config':
             setTimeout(() => {
-              this.broadcast_sc;
+              this.broadcast_sc();
             }, FS_DELAY);
             break;
           case 'cron.config':
             setTimeout(() => {
-              this.broadcast_cc;
+              this.broadcast_cc();
             }, FS_DELAY);
             break;
           case 'eula.txt':
             setTimeout(() => {
-              this.emit_eula;
+              this.emit_eula();
             }, FS_DELAY);
             break;
           case 'server-icon.png':
             setTimeout(() => {
-              this.broadcast_icon;
+              this.broadcast_icon();
             }, FS_DELAY);
             break;
           case 'config.yml':
             setTimeout(() => {
-              this.broadcast_cy;
+              this.broadcast_cy();
             }, FS_DELAY);
             break;
         }
@@ -1185,7 +1187,7 @@ export class server_container {
       });
     })();
 
-    this.nsp.on('connection', (socket) => {
+    this.nsp.on('connection', async (socket) => {
       const ip_address = socket.request.connection.remoteAddress;
       const username = socket.request.user.username;
       const NOTICES_QUEUE_LENGTH = 10; // 0 < q <= 10
@@ -1571,47 +1573,66 @@ export class server_container {
         }
       };
 
-      async.waterfall(
-        [
-          async.apply(this.instance.property, 'owner'),
-          (ownership_data, cb) => {
-            auth.test_membership(
-              username,
-              ownership_data.groupname,
-              (is_valid) => {
-                cb(null, is_valid);
-              },
-            );
-          },
-          (is_valid, cb) => {
-            cb(!is_valid); //logical NOT'ted:  is_valid ? falsy error, !is_valid ? truthy error
-          },
-        ],
-        (err) => {
-          if (err) socket.disconnect();
-          else {
-            logging.info(
-              `[${this.instance.server_name}] ${username} (${ip_address}) joined server namespace`,
-            );
+      const connection_handler = (err) => {
+        if (err) socket.disconnect();
+        else {
+          logging.info(
+            `[${this.instance.server_name}] ${username} (${ip_address}) joined server namespace`,
+          );
 
-            socket.on('command', produce_receipt);
-            socket.on('get_file_contents', get_file_contents);
-            socket.on('get_available_tails', get_available_tails);
-            socket.on('property', get_prop);
-            socket.on('page_data', get_page_data);
-            socket.on('archives', get_archives);
-            socket.on('increments', get_increments);
-            socket.on('increment_sizes', get_increment_sizes);
-            socket.on('cron', manage_cron);
-            socket.on('server.properties', this.broadcast_sp);
-            socket.on('server.config', this.broadcast_sc);
-            socket.on('cron.config', this.broadcast_cc);
-            socket.on('server-icon.png', this.broadcast_icon);
-            socket.on('config.yml', this.broadcast_cy);
-            socket.on('req_server_activity', this.broadcast_notices);
-          }
-        },
-      );
+          socket.on('command', (args) => {
+            produce_receipt(args);
+          });
+          socket.on('get_file_contents', (path) => {
+            get_file_contents(path);
+          });
+          socket.on('get_available_tails', () => {
+            get_available_tails();
+          });
+          socket.on('property', (requested) => {
+            get_prop(requested);
+          });
+          socket.on('page_data', (page) => {
+            get_page_data(page);
+          });
+          socket.on('archives', () => {
+            get_archives();
+          });
+          socket.on('increments', () => {
+            get_increments();
+          });
+          socket.on('increment_sizes', () => {
+            get_increment_sizes();
+          });
+          socket.on('cron', (opts) => {
+            manage_cron(opts);
+          });
+          socket.on('server.properties', () => {
+            this.broadcast_sp();
+          });
+          socket.on('server.config', () => {
+            this.broadcast_sc();
+          });
+          socket.on('cron.config', () => {
+            this.broadcast_cc();
+          });
+          socket.on('server-icon.png', () => {
+            this.broadcast_icon();
+          });
+          socket.on('config.yml', () => {
+            this.broadcast_cy();
+          });
+          socket.on('req_server_activity', () => {
+            this.broadcast_notices();
+          });
+        }
+      };
+
+      this.instance.property('owner', (err, data) => {
+        auth.test_membership(username, data.groupname, (isValid) => {
+          connection_handler(!isValid);
+        });
+      });
     }); //nsp on connect container ends
   }
 

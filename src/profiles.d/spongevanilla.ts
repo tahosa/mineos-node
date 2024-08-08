@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import xml_parser from 'xml2js';
 
-import profile, { type collection } from './template';
+import profile, { type collection } from './template.js';
 
 export default {
   name: 'SpongeVanilla',

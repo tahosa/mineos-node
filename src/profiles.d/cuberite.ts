@@ -4,7 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import which from 'which';
 
-import profile, { type collection } from './template';
+import profile, { type collection } from './template.js';
 
 export default {
   name: 'Cuberite C++ Server',
