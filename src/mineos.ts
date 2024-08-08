@@ -24,9 +24,9 @@ import { usedJavaVersion } from './java.js';
 const F_OK = constants.F_OK;
 
 const proc_paths = [
+  '/proc',
   '/usr/compat/linux/proc',
   '/system/lxproc',
-  '/proc',
   '/compat/linux/proc',
 ];
 let PROC_PATH: string;
@@ -1527,7 +1527,7 @@ export default class mineos {
       case 'memory':
         pids = server_pids_up();
         if (this.server_name in pids) {
-          procfs.PROC = PROC_PATH; //procfs will default to /proc--this is determined more accurately by mineos.js!
+          procfs['PROC'] = PROC_PATH; //procfs will default to /proc--this is determined more accurately by mineos.js!
           const ps = procfs(pids[this.server_name]['java']);
           ps.status((err, data) => {
             callback(err, data);
@@ -1770,7 +1770,7 @@ export default class mineos {
         break;
       case 'java_version_in_use':
         this.sc((err, dict) => {
-          usedJavaVersion(dict, callback);
+          usedJavaVersion(dict).then(callback);
         });
 
         break;

@@ -179,7 +179,7 @@ export default class server {
       };
 
       const host_heartbeat = () => {
-        async.waterfall([async.apply(procfs.meminfo)], (err, meminfo) => {
+        async.waterfall([async.apply(procfs['meminfo'])], (err, meminfo) => {
           this.front_end.emit('host_heartbeat', {
             uptime: os.uptime(),
             freemem:

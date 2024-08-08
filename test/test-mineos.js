@@ -262,7 +262,7 @@ test.mc_instance = function(test) {
 }
 
 test.valid_server_name = function(test) {
-  let regex_valid_server_name = /^(?!\.)[a-zA-Z0-9_\.]+$/;
+  // regex_valid_server_name = /^(?!\.)[a-zA-Z0-9_.]+$/;
   test.ok(mineos.valid_server_name('aaa'));
   test.ok(mineos.valid_server_name('server_1'));
   test.ok(mineos.valid_server_name('myserver'));
