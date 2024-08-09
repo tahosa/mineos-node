@@ -32,35 +32,23 @@ export default {
           // skip version 1.5.2 and earlier--non installer.jar model not supported workflow
         } else if (mcver == '1.10') {
           // 1.x major, .10 minor but not .10.2, chosen because url construction
-          item['filename'] =
-            `forge-${mcver}-${forgever}-${mcver}-installer.jar`;
+          item['filename'] = `forge-${mcver}-${forgever}-${mcver}-installer.jar`;
           item['url'] =
             `http://maven.minecraftforge.net/net/minecraftforge/forge/1.10-${forgever}-1.10.0/forge-1.10-${forgever}-1.10.0-installer.jar`;
-          item['downloaded'] = fs.existsSync(
-            path.join(profile_dir, item.id, item.filename),
-          );
+          item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
           p.push(item);
-        } else if (
-          parseInt(ver[1]) == 1 &&
-          parseInt(ver[2]) >= 7 &&
-          parseInt(ver[2]) <= 9
-        ) {
+        } else if (parseInt(ver[1]) == 1 && parseInt(ver[2]) >= 7 && parseInt(ver[2]) <= 9) {
           // 1.x major, .7-.9 minor, chosen because url construction
-          item['filename'] =
-            `forge-${mcver}-${forgever}-${mcver}-installer.jar`;
+          item['filename'] = `forge-${mcver}-${forgever}-${mcver}-installer.jar`;
           item['url'] =
             `http://files.minecraftforge.net/maven/net/minecraftforge/forge/${mcver}-${forgever}-${mcver}/${item['filename']}`;
-          item['downloaded'] = fs.existsSync(
-            path.join(profile_dir, item.id, item.filename),
-          );
+          item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
           p.push(item);
         } else {
           item['filename'] = `forge-${mcver}-${forgever}-installer.jar`;
           item['url'] =
             `http://files.minecraftforge.net/maven/net/minecraftforge/forge/${mcver}-${forgever}/${item['filename']}`;
-          item['downloaded'] = fs.existsSync(
-            path.join(profile_dir, item.id, item.filename),
-          );
+          item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
           p.push(item);
         }
       }

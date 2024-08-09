@@ -18,14 +18,11 @@ export default {
         if (inner_err) throw inner_err;
 
         try {
-          const packs =
-            result['metadata']['versioning'][0]['versions'][0]['version'];
+          const packs = result['metadata']['versioning'][0]['versions'][0]['version'];
 
           for (const index in packs) {
             const item = new profile();
-            const matches = packs[index].match(
-              /([\d.]+)-([\d.]+)?-?(\D+)-(\d+)/,
-            );
+            const matches = packs[index].match(/([\d.]+)-([\d.]+)?-?(\D+)-(\d+)/);
 
             item['version'] = packs[index];
             item['group'] = 'spongevanilla';
@@ -46,15 +43,11 @@ export default {
                 break;
             }
 
-            item['id'] =
-              `SpongeVanilla-${matches[1]}${matches[3][0].toLowerCase()}${matches[4]}`;
-            item['webui_desc'] =
-              `Version ${matches[2]}, build ${matches[4]} (mc: ${matches[1]})`;
+            item['id'] = `SpongeVanilla-${matches[1]}${matches[3][0].toLowerCase()}${matches[4]}`;
+            item['webui_desc'] = `Version ${matches[2]}, build ${matches[4]} (mc: ${matches[1]})`;
             item['weight'] = 5;
             item['filename'] = `spongevanilla-${item.version}.jar`;
-            item['downloaded'] = fs.existsSync(
-              path.join(profile_dir, item.id || '', item.filename || ''),
-            );
+            item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id || '', item.filename || ''));
             item['url'] =
               `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${item.version}/spongevanilla-${item.version}.jar`;
             p.push(item);

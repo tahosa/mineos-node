@@ -27,9 +27,7 @@ export default {
       item['webui_desc'] = 'Latest Linux x64 release';
       item['weight'] = 0;
       item['filename'] = 'Cuberite.tar.gz';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =
@@ -44,9 +42,7 @@ export default {
       item['webui_desc'] = 'Latest Linux x86 release';
       item['weight'] = 0;
       item['filename'] = 'Cuberite.tar.gz';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =
@@ -61,9 +57,7 @@ export default {
       item['webui_desc'] = 'Latest RPI release';
       item['weight'] = 0;
       item['filename'] = 'Cuberite.tar.gz';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =
@@ -78,9 +72,7 @@ export default {
       item['webui_desc'] = 'Latest FreeBSD x64 release';
       item['weight'] = 0;
       item['filename'] = 'Cuberite.tar.gz';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =
@@ -118,7 +110,7 @@ export default {
 
                     fs.move(old_filepath, new_filepath, inner_cb);
                   },
-                  cb,
+                  cb
                 );
               else cb(err);
             });
@@ -129,7 +121,7 @@ export default {
             console.error(err);
           }
           resolve();
-        },
+        }
       );
     });
   },

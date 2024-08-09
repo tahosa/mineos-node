@@ -19,7 +19,7 @@ export default class Server {
 
   constructor(
     baseDir: string,
-    emitter: Socket,
+    emitter: Socket
     // config: { creators?: string },
   ) {
     logger.debug(`creating server at ${baseDir}`);

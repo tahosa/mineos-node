@@ -30,11 +30,8 @@ export default {
           item['webui_desc'] = packs[index]['title'][0];
           item['weight'] = weight;
           item['filename'] = `BungeeCord-${item.version}.jar`;
-          item['downloaded'] = fs.existsSync(
-            path.join(profile_dir, item.id, item.filename),
-          );
-          item['url'] =
-            `http://ci.md-5.net/job/BungeeCord/${item.version}/artifact/bootstrap/target/BungeeCord.jar`;
+          item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
+          item['url'] = `http://ci.md-5.net/job/BungeeCord/${item.version}/artifact/bootstrap/target/BungeeCord.jar`;
           p.push(item);
           weight++;
         }

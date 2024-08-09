@@ -19,9 +19,7 @@ export default {
       item['webui_desc'] = 'Third-party Pocketmine build';
       item['weight'] = 0;
       item['filename'] = 'ImagicalMine.phar';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =

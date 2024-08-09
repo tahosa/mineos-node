@@ -43,10 +43,7 @@ if ('version' in opt.options) {
 }
 
 function return_git_commit_hash(callback) {
-  const gitproc = child_process.spawn(
-    'git',
-    'log -n 1 --pretty=format:"%H"'.split(' '),
-  );
+  const gitproc = child_process.spawn('git', 'log -n 1 --pretty=format:"%H"'.split(' '));
   let commit_value = '';
 
   gitproc.stdout.on('data', function (data) {
@@ -82,13 +79,11 @@ function handle_server(args, callback) {
           const retval: any[] = [];
 
           if (!err) {
-            retval.push(
-              `[${args.options.server_name}] Successfully executed "${command}"`,
-            );
+            retval.push(`[${args.options.server_name}] Successfully executed "${command}"`);
             if (payload) retval.push(payload);
           } else {
             retval.push(
-              `[${args.options.server_name}] Error executing "${command}" because server condition not met: ${err}`,
+              `[${args.options.server_name}] Error executing "${command}" because server condition not met: ${err}`
             );
           }
 
@@ -104,9 +99,7 @@ function handle_server(args, callback) {
             gid: parseInt(owner_pair[1]),
           });
         } catch (e) {
-          callback(1, [
-            'Provide owner attribute as uid:gid pair, e.g., 1000:1000',
-          ]);
+          callback(1, ['Provide owner attribute as uid:gid pair, e.g., 1000:1000']);
           return;
         }
         break;
@@ -127,15 +120,10 @@ function retrieve_property(args, callback) {
 
   arg_array.push(function (err, payload) {
     if (!err && payload !== undefined) {
-      retval.push(
-        `[${args.options.server_name}] Queried property: "${property}"`,
-      );
+      retval.push(`[${args.options.server_name}] Queried property: "${property}"`);
       retval.push(payload);
     } else {
-      retval.push(
-        `[${args.options.server_name}] Error querying property "${property}"`,
-        err,
-      );
+      retval.push(`[${args.options.server_name}] Error querying property "${property}"`, err);
     }
     callback(err ? 1 : 0, retval);
   });

@@ -39,13 +39,7 @@ export const SP_DEFAULTS: ServerProperties = {
   'enable-query': 'false',
 };
 
-export type JavaArgs =
-  | 'java_binary'
-  | 'java_xmx'
-  | 'java_xms'
-  | 'jarfile'
-  | 'jar_args'
-  | 'java_tweaks';
+export type JavaArgs = 'java_binary' | 'java_xmx' | 'java_xms' | 'jarfile' | 'jar_args' | 'java_tweaks';
 
 export type ServerConfig = {
   java: { [key in JavaArgs]: string };
@@ -60,13 +54,7 @@ export type ServerConfig = {
   };
 };
 
-export type CronActions =
-  | 'start'
-  | 'stop'
-  | 'restart'
-  | 'backup'
-  | 'archive'
-  | 'stuff';
+export type CronActions = 'start' | 'stop' | 'restart' | 'backup' | 'archive' | 'stuff';
 
 export type CronTask = {
   command: CronActions;

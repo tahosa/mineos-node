@@ -19,13 +19,10 @@ export default {
       item['webui_desc'] = 'Minecraft: PE server for Java (stable)';
       item['weight'] = 0;
       item['filename'] = 'nukkit-1.0-SNAPSHOT.jar';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
-      item['url'] =
-        'http://ci.mengcraft.com:8081/job/nukkit/lastStableBuild/artifact/target/nukkit-1.0-SNAPSHOT.jar';
+      item['url'] = 'http://ci.mengcraft.com:8081/job/nukkit/lastStableBuild/artifact/target/nukkit-1.0-SNAPSHOT.jar';
 
       p.push(JSON.parse(JSON.stringify(item)));
 
@@ -39,9 +36,7 @@ export default {
       item['webui_desc'] = 'Minecraft: PE server for Java (last successful)';
       item['weight'] = 0;
       item['filename'] = 'nukkit-1.0-SNAPSHOT.jar';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =

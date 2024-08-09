@@ -6,10 +6,7 @@ import { Logger } from './logger.js';
 
 const logger = Logger('util');
 
-export const readIni = (
-  filepath: string,
-  clearOnError = false,
-): { [key: string]: any } | undefined => {
+export const readIni = (filepath: string, clearOnError = false): { [key: string]: any } | undefined => {
   try {
     const data = fs.readFileSync(filepath);
     return ini.parse(data.toString());
@@ -43,11 +40,7 @@ export class PromisePool<T, I> {
   promise: Promise<T[]> | null = null;
   eventEmitter: EventEmitter = new EventEmitter();
 
-  constructor(
-    data: I[],
-    concurrency: number,
-    processor: (data: I) => Promise<T>,
-  ) {
+  constructor(data: I[], concurrency: number, processor: (data: I) => Promise<T>) {
     this.data = data;
     this.concurrancy = concurrency;
     this.processor = processor;

@@ -16,13 +16,10 @@ export default {
       item['releaseTime'] = new Date().getTime();
       item['type'] = 'release';
       item['group'] = 'spigot';
-      item['webui_desc'] =
-        'Latest BuildTools.jar for building Spigot/Craftbukkit';
+      item['webui_desc'] = 'Latest BuildTools.jar for building Spigot/Craftbukkit';
       item['weight'] = 0;
       item['filename'] = 'BuildTools.jar';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '';
       item['url'] =

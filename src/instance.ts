@@ -9,26 +9,14 @@ import { Tail } from 'tail';
 import userid from 'userid';
 import which from 'which';
 
-import {
-  DIRS,
-  ServerProperties,
-  ServerConfig,
-  CronConfig,
-  CronTask,
-  SP_DEFAULTS,
-} from './constants.js';
+import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants.js';
 import { Logger } from './logger.js';
 import { readIni } from './util.js';
 import { usedJavaVersion } from './java.js';
 
 const logger = Logger('instance');
 
-const proc_paths = [
-  '/proc',
-  '/usr/compat/linux/proc',
-  '/system/lxproc',
-  '/compat/linux/proc',
-];
+const proc_paths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
 let PROC_PATH: string;
 
 for (const proc in proc_paths) {
@@ -168,9 +156,7 @@ export class Instance {
             .toString('ascii')
             .replace(/\u0000/g, ' ');
         } catch (e) {
-          logger.warn(
-            `error reading or parsing ${PROC_PATH}/${pids[i]}/environ`,
-          );
+          logger.warn(`error reading or parsing ${PROC_PATH}/${pids[i]}/environ`);
           continue;
         }
 
@@ -197,10 +183,7 @@ export class Instance {
    * @returns Instance name, if one is found
    * @throws Error if no match is found
    */
-  static extractInstanceName(
-    path: string,
-    baseDir: string = DIRS.servers,
-  ): string {
+  static extractInstanceName(path: string, baseDir: string = DIRS.servers): string {
     const re = new RegExp(`${baseDir}/([a-zA-Z0-9_.]+)`);
     const matches = re.exec(path);
     if (matches) {
@@ -218,11 +201,7 @@ export class Instance {
    */
   private updateIni(key: MemoKeys) {
     const lastWrite = fs.statSync(this.env.sp).mtime.getTime();
-    if (
-      (key in this.timestamps &&
-        Number(this.timestamps[key]) - lastWrite !== 0) ||
-      !this.memoFiles[key]
-    ) {
+    if ((key in this.timestamps && Number(this.timestamps[key]) - lastWrite !== 0) || !this.memoFiles[key]) {
       this.timestamps[key] = lastWrite;
       this.memoFiles[key] = memoize(readIni);
     }
@@ -288,11 +267,8 @@ export class Instance {
    */
   modifySc(
     section: keyof ServerConfig,
-    property:
-      | keyof ServerConfig['java']
-      | keyof ServerConfig['onreboot']
-      | keyof ServerConfig['minecraft'],
-    newValue: any,
+    property: keyof ServerConfig['java'] | keyof ServerConfig['onreboot'] | keyof ServerConfig['minecraft'],
+    newValue: any
   ): ServerConfig {
     const currentProps = this.sc();
     if (currentProps[section]) {
@@ -352,9 +328,7 @@ export class Instance {
     const currentCron = this.crons();
 
     if (!(identifier in currentCron)) {
-      logger.warn(
-        `cannot enable cron job ${identifier} because it does not exist for instance ${this.name}`,
-      );
+      logger.warn(`cannot enable cron job ${identifier} because it does not exist for instance ${this.name}`);
       return currentCron;
     }
 
@@ -383,19 +357,7 @@ export class Instance {
       throw new Error(`instance ${this.name} does not exist or is not running`);
     }
 
-    child.execFileSync(
-      binary,
-      [
-        '-s',
-        `mc-${this.name}`,
-        '-p',
-        '0',
-        '-X',
-        'eval',
-        `stuff "${command}\x0a"`,
-      ],
-      params,
-    );
+    child.execFileSync(binary, ['-s', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params);
   }
 
   /**
@@ -418,21 +380,13 @@ export class Instance {
           groupname: userid.groupname(statData.gid),
         }));
       case 'owner_uid':
-        return await fs.promises
-          .stat(this.env.cwd)
-          .then((statData) => statData.uid);
+        return await fs.promises.stat(this.env.cwd).then((statData) => statData.uid);
       case 'owner_gid':
-        return await fs.promises
-          .stat(this.env.cwd)
-          .then((statData) => statData.gid);
+        return await fs.promises.stat(this.env.cwd).then((statData) => statData.gid);
       case 'exists':
-        return await fs.promises
-          .stat(this.env.sp)
-          .then((statData) => !!statData);
+        return await fs.promises.stat(this.env.sp).then((statData) => !!statData);
       case '!exists':
-        return await fs.promises
-          .stat(this.env.sp)
-          .then((statData) => !statData);
+        return await fs.promises.stat(this.env.sp).then((statData) => !statData);
       case 'up':
         pids = Instance.listRunningInstancePids();
         return this.name in pids;
@@ -525,32 +479,23 @@ export class Instance {
       case 'commit_interval':
         return this.sc().minecraft.commit_interval;
       case 'eula':
-        return await fs.promises
-          .readFile(path.join(this.env.cwd, 'eula.txt'))
-          .then((data) => {
-            const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
-            const lines = data.toString().split('\n');
-            let matches = false;
-            for (const i in lines) {
-              if (lines[i].match(REGEX_EULA_TRUE)) matches = true;
-            }
-            return matches;
-          });
+        return await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt')).then((data) => {
+          const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
+          const lines = data.toString().split('\n');
+          let matches = false;
+          for (const i in lines) {
+            if (lines[i].match(REGEX_EULA_TRUE)) matches = true;
+          }
+          return matches;
+        });
       case 'server_files':
         // Get the list of files copied into the server directory
-        let serverFiles = (await fs.promises.readdir(this.env.cwd)).reduce(
-          (acc, f) => {
-            if (
-              f.slice(-4).toLowerCase() == '.jar' ||
-              f.slice(-5).toLowerCase() == '.phar' ||
-              f === 'Cuberite'
-            ) {
-              acc[f] = true;
-            }
-            return acc;
-          },
-          {},
-        );
+        let serverFiles = (await fs.promises.readdir(this.env.cwd)).reduce((acc, f) => {
+          if (f.slice(-4).toLowerCase() == '.jar' || f.slice(-5).toLowerCase() == '.phar' || f === 'Cuberite') {
+            acc[f] = true;
+          }
+          return acc;
+        }, {});
 
         // If a profile is set, also get the the list of files from the profile
         const scProfile = this.sc().minecraft.profile;
@@ -561,9 +506,7 @@ export class Instance {
             ...(await fs.promises.readdir(profileDir)).reduce((acc, f) => {
               if (
                 !serverFiles[f] &&
-                (f.slice(-4).toLowerCase() == '.jar' ||
-                  f.slice(-5).toLowerCase() == '.phar' ||
-                  f === 'Cuberite')
+                (f.slice(-4).toLowerCase() == '.jar' || f.slice(-5).toLowerCase() == '.phar' || f === 'Cuberite')
               ) {
                 acc[f] = true;
               }
@@ -603,9 +546,7 @@ export class Instance {
         });
 
       case 'FTBInstall.sh':
-        return !!(await fs.promises.stat(
-          path.join(this.env.cwd, 'FTBInstall.sh'),
-        ));
+        return !!(await fs.promises.stat(path.join(this.env.cwd, 'FTBInstall.sh')));
       case 'java_version_in_use':
         return await usedJavaVersion(this.sc());
       default:

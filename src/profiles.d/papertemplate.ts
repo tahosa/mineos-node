@@ -28,7 +28,7 @@ export default (name) => {
               url: `https://papermc.io/api/v2/projects/${lowername}/versions/${version}/`,
             }).catch((err) => {
               console.error(err);
-            }) as Promise<string>,
+            }) as Promise<string>
           );
         }
         return Promise.all(paperVersions).then((responses) => {
@@ -45,9 +45,7 @@ export default (name) => {
             item['filename'] = `${lowername}-${ver}-${build}.jar`;
             item['url'] =
               `${response.request.res.responseUrl}builds/${build}/downloads/${lowername}-${ver}-${build}.jar`;
-            item['downloaded'] = fs.existsSync(
-              path.join(profile_dir, item.id, item.filename),
-            );
+            item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
             item['version'] = ver;
             item['release_version'] = ver;
             item['type'] = 'release';

@@ -11,14 +11,12 @@ console.log('Stopping running games');
 const servers = server_list_up();
 
 // Read base directory configurations
-const mineos_config =
-  readIni('/etc/mineos.conf') || readIni('/usr/local/etc/mineos.conf') || {};
+const mineos_config = readIni('/etc/mineos.conf') || readIni('/usr/local/etc/mineos.conf') || {};
 let base_directory = '/var/games/minecraft';
 
 if ('base_directory' in mineos_config) {
   try {
-    if (mineos_config['base_directory'].length < 2)
-      throw new Error('Invalid base_directory length.');
+    if (mineos_config['base_directory'].length < 2) throw new Error('Invalid base_directory length.');
 
     base_directory = mineos_config['base_directory'];
     fs.ensureDirSync(base_directory);

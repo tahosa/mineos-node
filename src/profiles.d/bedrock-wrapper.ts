@@ -17,9 +17,7 @@ export default {
       item['webui_desc'] = 'Bedrock Server Wrapper';
       item['weight'] = 0;
       item['filename'] = 'mineos-bedrock-wrapper-1.0-SNAPSHOT.jar';
-      item['downloaded'] = fs.existsSync(
-        path.join(profile_dir, item.id, item.filename),
-      );
+      item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
       item['version'] = 0;
       item['release_version'] = '1.0';
       item['url'] =

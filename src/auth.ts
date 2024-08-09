@@ -18,8 +18,7 @@ const auth = {
         if (err) inner_callback(true);
         else {
           passwd.getShadow({ username: user }, (err, shadow_info) => {
-            if (shadow_info && shadow_info.password == '!')
-              inner_callback(false);
+            if (shadow_info && shadow_info.password == '!') inner_callback(false);
             else if (shadow_info) {
               const password_parts = shadow_info['password'].split(/\$/);
               const salt = password_parts[2];
@@ -39,8 +38,7 @@ const auth = {
       // return true if error, false if auth failed, string for user if successful
       try {
         const user_data = nodePosix.getpwnam(user);
-        if (crypt(plaintext, user_data.passwd) == user_data.passwd)
-          inner_callback(user);
+        if (crypt(plaintext, user_data.passwd) == user_data.passwd) inner_callback(user);
         else if (user_data) {
           // the crypt hash method fails on FreeNAS so try the sha512
           const password_parts = user_data.passwd.split(/\$/);
@@ -86,10 +84,7 @@ const auth = {
       .on('group', (group_data) => {
         if (group == group_data.groupname)
           try {
-            if (
-              group_data.users.indexOf(username) >= 0 ||
-              group_data.gid == userid.gids(username)[0]
-            )
+            if (group_data.users.indexOf(username) >= 0 || group_data.gid == userid.gids(username)[0])
               membership_valid = true;
           } catch (e) {
             console.error(e);
@@ -113,8 +108,7 @@ const auth = {
               if (user_data.uid == uid) uid_present = true;
             })
             .on('end', () => {
-              if (!uid_present)
-                cb(new Error(`UID ${uid} does not exist on this system`));
+              if (!uid_present) cb(new Error(`UID ${uid} does not exist on this system`));
               else cb();
             });
         },
@@ -125,13 +119,12 @@ const auth = {
               if (group_data.gid == gid) gid_present = true;
             })
             .on('end', () => {
-              if (!gid_present)
-                cb(new Error(`GID ${gid} does not exist on this system`));
+              if (!gid_present) cb(new Error(`GID ${gid} does not exist on this system`));
               else cb();
             });
         },
       ],
-      callback,
+      callback
     );
   },
 };

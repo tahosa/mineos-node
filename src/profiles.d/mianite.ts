@@ -30,9 +30,7 @@ export default {
         item['weight'] = 10;
         item['filename'] = path.basename(ref_obj['download']);
         item['url'] = ref_obj['download'];
-        item['downloaded'] = fs.existsSync(
-          path.join(profile_dir, item.id || '', item.filename),
-        );
+        item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id || '', item.filename));
         item['version'] = version;
         item['release_version'] = version;
 

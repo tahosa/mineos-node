@@ -23,12 +23,7 @@ import { usedJavaVersion } from './java.js';
 
 const F_OK = constants.F_OK;
 
-const proc_paths = [
-  '/proc',
-  '/usr/compat/linux/proc',
-  '/system/lxproc',
-  '/compat/linux/proc',
-];
+const proc_paths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
 let PROC_PATH: string;
 
 for (const proc in proc_paths) {
@@ -109,8 +104,7 @@ export const server_pids_up = () => {
     const screen_match = SCREEN_REGEX.exec(cmdline);
 
     if (screen_match) {
-      if (screen_match[1] in servers_found)
-        servers_found[screen_match[1]]['screen'] = parseInt(pids[i]);
+      if (screen_match[1] in servers_found) servers_found[screen_match[1]]['screen'] = parseInt(pids[i]);
       else servers_found[screen_match[1]] = { screen: parseInt(pids[i]) };
     } else {
       try {
@@ -125,8 +119,7 @@ export const server_pids_up = () => {
       const java_match = JAVA_REGEX.exec(environ);
 
       if (java_match) {
-        if (java_match[1] in servers_found)
-          servers_found[java_match[1]]['java'] = parseInt(pids[i]);
+        if (java_match[1] in servers_found) servers_found[java_match[1]]['java'] = parseInt(pids[i]);
         else servers_found[java_match[1]] = { java: parseInt(pids[i]) };
       }
     }
@@ -151,12 +144,7 @@ export default class mineos {
       bwd: path.join(base_dir, DIRS['backup'], server_name),
       awd: path.join(base_dir, DIRS['archive'], server_name),
       pwd: path.join(base_dir, DIRS['profiles']),
-      sp: path.join(
-        base_dir,
-        DIRS['servers'],
-        server_name,
-        'server.properties',
-      ),
+      sp: path.join(base_dir, DIRS['servers'], server_name, 'server.properties'),
       sc: path.join(base_dir, DIRS['servers'], server_name, 'server.config'),
       cc: path.join(base_dir, DIRS['servers'], server_name, 'cron.config'),
     };
@@ -183,10 +171,7 @@ export default class mineos {
   // ini related functions and vars
   read_ini = (
     filepath: string,
-    callback: (
-      arg0: NodeJS.ErrnoException | null,
-      arg1?: { [key: string]: any },
-    ) => void,
+    callback: (arg0: NodeJS.ErrnoException | null, arg1?: { [key: string]: any }) => void
   ) => {
     fs.readFile(filepath, (err: NodeJS.ErrnoException | null, data: Buffer) => {
       if (err) {
@@ -206,10 +191,7 @@ export default class mineos {
       [
         async.apply(fs.stat, this.env.sp),
         (stat_data, cb) => {
-          if (
-            fn in this.memoize_timestamps &&
-            this.memoize_timestamps[fn] - stat_data.mtime == 0
-          ) {
+          if (fn in this.memoize_timestamps && this.memoize_timestamps[fn] - stat_data.mtime == 0) {
             this.memoized_files[fn](this.env.sp, cb);
           } else {
             this.memoize_timestamps[fn] = stat_data.mtime;
@@ -218,7 +200,7 @@ export default class mineos {
           }
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -235,7 +217,7 @@ export default class mineos {
           fs.writeFile(this.env.sp, ini.stringify(sp_data), cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -256,10 +238,7 @@ export default class mineos {
       [
         async.apply(fs.stat, this.env.sc),
         (stat_data, cb) => {
-          if (
-            fn in this.memoize_timestamps &&
-            this.memoize_timestamps[fn] - stat_data.mtime == 0
-          ) {
+          if (fn in this.memoize_timestamps && this.memoize_timestamps[fn] - stat_data.mtime == 0) {
             this.memoized_files[fn](this.env.sc, cb);
           } else {
             this.memoize_timestamps[fn] = stat_data.mtime;
@@ -276,7 +255,7 @@ export default class mineos {
         } else {
           callback(err, retval);
         }
-      },
+      }
     );
   };
 
@@ -298,7 +277,7 @@ export default class mineos {
           fs.writeFile(this.env.sc, ini.stringify(sc_data), cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -320,7 +299,7 @@ export default class mineos {
           fs.writeFile(this.env.cc, ini.stringify(cron_data), cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -336,7 +315,7 @@ export default class mineos {
           fs.writeFile(this.env.cc, ini.stringify(cron_data), cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -352,7 +331,7 @@ export default class mineos {
           fs.writeFile(this.env.cc, ini.stringify(cron_data), cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -378,7 +357,7 @@ export default class mineos {
         async.apply(this.modify_sc, 'java', 'java_xmx', '256'),
         async.apply(this.modify_sc, 'onreboot', 'start', false),
       ],
-      callback,
+      callback
     );
   };
 
@@ -401,7 +380,7 @@ export default class mineos {
         async.apply(fs.chown, this.env.cc, owner['uid'], owner['gid']),
         async.apply(this.modify_sc, 'minecraft', 'unconventional', true),
       ],
-      callback,
+      callback
     );
   };
 
@@ -452,14 +431,9 @@ export default class mineos {
                     const old_filepath = path.join(old_dir, file);
                     const new_filepath = path.join(source_dir, file);
 
-                    fs.move(
-                      old_filepath,
-                      new_filepath,
-                      { overwrite: true },
-                      inner_cb,
-                    );
+                    fs.move(old_filepath, new_filepath, { overwrite: true }, inner_cb);
                   },
-                  cb,
+                  cb
                 );
               else cb(err);
             });
@@ -468,7 +442,7 @@ export default class mineos {
         (err) => {
           if (attempted_move) inner_callback(err);
           else inner_callback(null); //not really an error if it cancelled because no parent dir
-        },
+        }
       );
     };
 
@@ -509,7 +483,7 @@ export default class mineos {
             async.apply(unzipper_it),
             async.apply(this.chown, owner['uid'], owner['gid']),
           ],
-          callback,
+          callback
         );
 
         break;
@@ -531,7 +505,7 @@ export default class mineos {
               });
             },
           ],
-          callback,
+          callback
         );
         break;
     }
@@ -548,7 +522,7 @@ export default class mineos {
           fs.chown(EULA_PATH, stat.uid, stat.gid, cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -561,19 +535,12 @@ export default class mineos {
         async.apply(fs.remove, this.env.bwd),
         async.apply(fs.remove, this.env.awd),
       ],
-      callback,
+      callback
     );
   };
 
   get_start_args = (callback) => {
-    type javaArgs =
-      | 'binary'
-      | 'xmx'
-      | 'xms'
-      | 'jarfile'
-      | 'jar_args'
-      | 'java_tweaks'
-      | number;
+    type javaArgs = 'binary' | 'xmx' | 'xms' | 'jarfile' | 'jar_args' | 'java_tweaks' | number;
 
     const type_jar_unconventional = (inner_callback) => {
       const java_binary = which.sync('java');
@@ -583,28 +550,14 @@ export default class mineos {
           binary: (cb) => {
             this.sc((err, dict) => {
               const value = (dict.java || {}).java_binary || java_binary;
-              cb(
-                new Error(
-                  value.length
-                    ? undefined
-                    : 'No java binary assigned for server.',
-                ),
-                value,
-              );
+              cb(new Error(value.length ? undefined : 'No java binary assigned for server.'), value);
             });
           },
           xmx: (cb) => {
             this.sc((err, dict) => {
               const value = parseInt((dict.java || {}).java_xmx) || 0;
 
-              cb(
-                new Error(
-                  value >= 0
-                    ? undefined
-                    : 'XMX heapsize must be positive integer >= 0',
-                ),
-                value,
-              );
+              cb(new Error(value >= 0 ? undefined : 'XMX heapsize must be positive integer >= 0'), value);
             });
           },
           xms: (cb) => {
@@ -614,11 +567,9 @@ export default class mineos {
 
               cb(
                 new Error(
-                  xmx >= xms && xms >= 0
-                    ? undefined
-                    : 'XMS heapsize must be positive integer where XMX >= XMS >= 0',
+                  xmx >= xms && xms >= 0 ? undefined : 'XMS heapsize must be positive integer where XMX >= XMS >= 0'
                 ),
-                xms,
+                xms
               );
             });
           },
@@ -666,7 +617,7 @@ export default class mineos {
 
             inner_callback(null, args);
           }
-        },
+        }
       );
     };
 
@@ -678,24 +629,14 @@ export default class mineos {
           binary: (cb) => {
             this.sc((err, dict) => {
               const value = (dict.java || {}).java_binary || java_binary;
-              cb(
-                value.length
-                  ? null
-                  : new Error('No java binary assigned for server.'),
-                value,
-              );
+              cb(value.length ? null : new Error('No java binary assigned for server.'), value);
             });
           },
           xmx: (cb) => {
             this.sc((err, dict) => {
               const value = parseInt((dict.java || {}).java_xmx) || 0;
 
-              cb(
-                value > 0
-                  ? null
-                  : new Error('XMX heapsize must be positive integer > 0'),
-                value,
-              );
+              cb(value > 0 ? null : new Error('XMX heapsize must be positive integer > 0'), value);
             });
           },
           xms: (cb) => {
@@ -703,12 +644,8 @@ export default class mineos {
               const xmx = parseInt((dict.java || {}).java_xmx) || 0;
               const xms = parseInt((dict.java || {}).java_xms) || xmx;
               cb(
-                xmx >= xms && xms > 0
-                  ? null
-                  : new Error(
-                      'XMS heapsize must be positive integer where XMX >= XMS > 0',
-                    ),
-                xms,
+                xmx >= xms && xms > 0 ? null : new Error('XMS heapsize must be positive integer where XMX >= XMS > 0'),
+                xms
               );
             });
           },
@@ -737,12 +674,7 @@ export default class mineos {
             inner_callback(err, {});
           } else {
             const args = ['-dmS', `mc-${this.server_name}`];
-            args.push.apply(args, [
-              `${results.binary}`,
-              '-server',
-              `-Xmx${results.xmx}M`,
-              `-Xms${results.xms}M`,
-            ]);
+            args.push.apply(args, [`${results.binary}`, '-server', `-Xmx${results.xmx}M`, `-Xms${results.xms}M`]);
 
             if (results.java_tweaks) {
               const splits = (results.java_tweaks as string).split(/ /);
@@ -756,18 +688,13 @@ export default class mineos {
               for (const i in splits) args.push(splits[i]);
             }
 
-            if (
-              (results?.jarfile as string).toLowerCase().indexOf('forge') == 0
-            )
-              if (
-                (results?.jarfile as string).slice(-13).toLowerCase() ==
-                'installer.jar'
-              )
+            if ((results?.jarfile as string).toLowerCase().indexOf('forge') == 0)
+              if ((results?.jarfile as string).slice(-13).toLowerCase() == 'installer.jar')
                 args.push('--installServer');
 
             inner_callback(null, args);
           }
-        },
+        }
       );
     };
 
@@ -786,8 +713,7 @@ export default class mineos {
           pharfile: (cb) => {
             this.sc((err, dict) => {
               const pharfile = (dict.java || {}).jarfile;
-              if (!pharfile)
-                cb(new Error('Server not assigned a runnable phar'));
+              if (!pharfile) cb(new Error('Server not assigned a runnable phar'));
               else cb(null, pharfile);
             });
           },
@@ -796,15 +722,10 @@ export default class mineos {
           if (err) {
             inner_callback(err, {});
           } else {
-            const args = [
-              '-dmS',
-              `mc-${this.server_name}`,
-              results.binary,
-              results.pharfile,
-            ];
+            const args = ['-dmS', `mc-${this.server_name}`, results.binary, results.pharfile];
             inner_callback(null, args);
           }
-        },
+        }
       );
     };
 
@@ -820,8 +741,7 @@ export default class mineos {
           const jarfile = (sc_data.java || {}).jarfile;
           const unconventional = (sc_data.minecraft || {}).unconventional;
 
-          if (!jarfile)
-            cb('Cannot start server without a designated jar/phar.', null);
+          if (!jarfile) cb('Cannot start server without a designated jar/phar.', null);
           else if (jarfile.slice(-4).toLowerCase() == '.jar') {
             if (unconventional) type_jar_unconventional(cb);
             else type_jar(cb);
@@ -829,7 +749,7 @@ export default class mineos {
           else if (jarfile == 'Cuberite') type_cuberite(cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -866,19 +786,13 @@ export default class mineos {
           if ((sc.minecraft || {}).profile) {
             const source = path.join(this.env.pwd, sc.minecraft.profile) + '/';
             const dest = this.env.cwd + '/';
-            rsync_profile(
-              source,
-              dest,
-              owner_info?.['username'],
-              owner_info?.['groupname'],
-              cb,
-            );
+            rsync_profile(source, dest, owner_info?.['username'], owner_info?.['groupname'], cb);
           } else {
             cb(null);
           }
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -917,20 +831,18 @@ export default class mineos {
 
           for (const i in incr_file_list) {
             if (incr_file_list[i].toString().match(/sent \d+ bytes/)) continue; //known pattern on freebsd: 'sent 79 bytes  received 19 bytes  196.00 bytes/sec'
-            all_files = all_files.concat(
-              incr_file_list[i].toString().split('\n'),
-            );
+            all_files = all_files.concat(incr_file_list[i].toString().split('\n'));
           }
 
           cb(
             null,
             all_files.filter((n) => {
               return n.length;
-            }),
+            })
           );
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -956,18 +868,15 @@ export default class mineos {
         async.apply(this.sc),
         (sc_data, cb) => {
           if ((sc_data.minecraft || {}).profile) {
-            this.profile_delta(
-              sc_data.minecraft.profile,
-              (err, changed_files) => {
-                if (err) {
-                  if (err == 23)
-                    //source dir of profile non-existent
-                    cb(); //ignore issue; profile non-essential to start (server_jar is req'd only)
-                  else cb(err);
-                } else if (changed_files) this.copy_profile(cb);
-                else cb();
-              },
-            );
+            this.profile_delta(sc_data.minecraft.profile, (err, changed_files) => {
+              if (err) {
+                if (err == 23)
+                  //source dir of profile non-existent
+                  cb(); //ignore issue; profile non-essential to start (server_jar is req'd only)
+                else cb(err);
+              } else if (changed_files) this.copy_profile(cb);
+              else cb();
+            });
           } else {
             cb();
           }
@@ -982,7 +891,7 @@ export default class mineos {
         setTimeout(() => {
           callback(err, result);
         }, 100);
-      },
+      }
     );
   };
 
@@ -1010,11 +919,11 @@ export default class mineos {
               if (this.server_name in server_pids_up())
                 cb(new Error()); //error, stop did not succeed
               else cb(null); //no error, stop succeeded as expected
-            },
+            }
           );
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -1050,7 +959,7 @@ export default class mineos {
           if (this.server_name in server_pids_up())
             callback(true); //error, stop succeeded: false
           else callback(null); //no error, stop succeeded: true
-        },
+        }
       );
     }
   };
@@ -1075,21 +984,13 @@ export default class mineos {
             null,
             child_process.spawn(
               binary,
-              [
-                '-S',
-                `mc-${this.server_name}`,
-                '-p',
-                '0',
-                '-X',
-                'eval',
-                `stuff "${msg}\x0a"`,
-              ],
-              params,
-            ),
+              ['-S', `mc-${this.server_name}`, '-p', '0', '-X', 'eval', `stuff "${msg}\x0a"`],
+              params
+            )
           );
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -1114,26 +1015,17 @@ export default class mineos {
             null,
             child_process.spawn(
               binary,
-              [
-                '-S',
-                `mc-${this.server_name}`,
-                '-p',
-                '0',
-                '-X',
-                'eval',
-                'stuff "save-all\x0a"',
-              ],
-              params,
-            ),
+              ['-S', `mc-${this.server_name}`, '-p', '0', '-X', 'eval', 'stuff "save-all\x0a"'],
+              params
+            )
           );
         },
         (cb) => {
-          const actual_delay =
-            (parseInt(seconds_delay || '') || FALLBACK_DELAY_SECONDS) * 1000;
+          const actual_delay = (parseInt(seconds_delay || '') || FALLBACK_DELAY_SECONDS) * 1000;
           setTimeout(cb, actual_delay);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -1164,18 +1056,14 @@ export default class mineos {
     });
 
     async.waterfall(
-      [
-        async.apply(this.verify, 'exists'),
-        async.apply(this.verify, 'up'),
-        async.apply(this.stuff, 'save-all'),
-      ],
+      [async.apply(this.verify, 'exists'), async.apply(this.verify, 'up'), async.apply(this.stuff, 'save-all')],
       (err) => {
         if (err) {
           clearTimeout(timeout);
           new_tail.unwatch();
           callback(true);
         }
-      },
+      }
     );
   };
 
@@ -1202,7 +1090,7 @@ export default class mineos {
           });
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -1242,18 +1130,13 @@ export default class mineos {
           else cb(null);
         },
       ],
-      callback,
+      callback
     );
   };
 
   backup = (callback) => {
     const binary = which.sync('rdiff-backup');
-    const args = [
-      '--exclude',
-      path.join(this.env.cwd, 'dynmap'),
-      `${this.env.cwd}/`,
-      this.env.bwd,
-    ];
+    const args = ['--exclude', path.join(this.env.cwd, 'dynmap'), `${this.env.cwd}/`, this.env.bwd];
     const params = { cwd: this.env.bwd }; //bwd!
 
     async.series(
@@ -1272,19 +1155,13 @@ export default class mineos {
           });
         },
       ],
-      callback,
+      callback
     );
   };
 
   restore = (step, callback) => {
     const binary = which.sync('rdiff-backup');
-    const args = [
-      '--restore-as-of',
-      step,
-      '--force',
-      this.env.bwd,
-      this.env.cwd,
-    ];
+    const args = ['--restore-as-of', step, '--force', this.env.bwd, this.env.cwd];
     const params = { cwd: this.env.bwd };
 
     const proc = child_process.spawn(binary, args, params);
@@ -1543,8 +1420,7 @@ export default class mineos {
             (sc_data, cb) => {
               const jarfile = (sc_data.java || {}).jarfile;
 
-              if (jarfile && jarfile.slice(-5).toLowerCase() == '.phar')
-                cb(true, null);
+              if (jarfile && jarfile.slice(-5).toLowerCase() == '.phar') cb(true, null);
               else {
                 pids = server_pids_up();
                 if (this.server_name in pids) {
@@ -1557,7 +1433,7 @@ export default class mineos {
               }
             },
           ],
-          callback,
+          callback
         );
         break;
       case 'query':
@@ -1649,9 +1525,7 @@ export default class mineos {
         break;
       case 'commit_interval':
         this.sc((err, dict) => {
-          const interval = parseInt(
-            (dict['minecraft'] || {})['commit_interval'],
-          );
+          const interval = parseInt((dict['minecraft'] || {})['commit_interval']);
           if (interval > 0) callback(null, interval);
           else callback(null, null);
         });
@@ -1681,17 +1555,17 @@ export default class mineos {
               server_files.push(
                 ...sf.filter((file) => {
                   return file.substr(-4).toLowerCase() == '.jar';
-                }),
+                })
               );
               server_files.push(
                 ...sf.filter((file) => {
                   return file.substr(-5).toLowerCase() == '.phar';
-                }),
+                })
               );
               server_files.push(
                 ...sf.filter((file) => {
                   return file == 'Cuberite';
-                }),
+                })
               );
               cb();
             },
@@ -1699,10 +1573,7 @@ export default class mineos {
             (sc_data, cb) => {
               let active_profile_dir = '';
               try {
-                active_profile_dir = path.join(
-                  this.env.pwd,
-                  sc_data.minecraft.profile,
-                );
+                active_profile_dir = path.join(this.env.pwd, sc_data.minecraft.profile);
               } catch (e) {
                 cb();
                 return;
@@ -1715,13 +1586,11 @@ export default class mineos {
                   server_files.push(
                     ...files.filter((file) => {
                       return (
-                        (file.slice(-4).toLowerCase() == '.jar' &&
-                          server_files.indexOf(file) < 0) ||
-                        (file.slice(-5).toLowerCase() == '.phar' &&
-                          server_files.indexOf(file) < 0) ||
+                        (file.slice(-4).toLowerCase() == '.jar' && server_files.indexOf(file) < 0) ||
+                        (file.slice(-5).toLowerCase() == '.phar' && server_files.indexOf(file) < 0) ||
                         (file == 'Cuberite' && server_files.indexOf(file) < 0)
                       );
-                    }),
+                    })
                   );
                   cb();
                 }
@@ -1730,7 +1599,7 @@ export default class mineos {
           ],
           (err) => {
             callback(err, server_files);
-          },
+          }
         );
         break;
       case 'autosave':
@@ -1827,8 +1696,7 @@ export default class mineos {
 
     function buffer_to_ascii(buf) {
       let retval = '';
-      for (let i = 0; i < buf.length; i++)
-        retval += buf[i] == 0x0000 ? '' : String.fromCharCode(buf[i]);
+      for (let i = 0; i < buf.length; i++) retval += buf[i] == 0x0000 ? '' : String.fromCharCode(buf[i]);
       return retval;
     }
 
@@ -1864,10 +1732,7 @@ export default class mineos {
         socket.end();
 
         const legacy_split = splitBuffer(data, 0x00a7);
-        const modern_split = swapBytes(data.subarray(3))
-          .toString('ucs2')
-          .split('\u0000')
-          .splice(1);
+        const modern_split = swapBytes(data.subarray(3)).toString('ucs2').split('\u0000').splice(1);
 
         if (modern_split.length == 5) {
           // modern ping to modern server
@@ -1884,9 +1749,7 @@ export default class mineos {
             callback(null, {
               protocol: '',
               server_version: '',
-              motd: buffer_to_ascii(
-                legacy_split[0].subarray(3, legacy_split[0].length - 1),
-              ),
+              motd: buffer_to_ascii(legacy_split[0].subarray(3, legacy_split[0].length - 1)),
               players_online: parseInt(buffer_to_ascii(legacy_split[1])),
               players_max: parseInt(buffer_to_ascii(legacy_split[2])),
             });
@@ -1945,7 +1808,7 @@ export default class mineos {
       () => {
         q.close();
         callback(null, retval);
-      },
+      }
     );
   };
 
@@ -1956,13 +1819,7 @@ export default class mineos {
     tmp.file((err, new_file_path) => {
       if (err) throw err;
 
-      const args = [
-        '--force',
-        '--restore-as-of',
-        restore_as_of,
-        abs_filepath,
-        new_file_path,
-      ];
+      const args = ['--force', '--restore-as-of', restore_as_of, abs_filepath, new_file_path];
       const params = { cwd: this.env.bwd };
       const proc = child_process.spawn(binary, args, params);
 
@@ -1983,17 +1840,13 @@ export default class mineos {
   };
 
   previous_property = (restore_as_of, callback) => {
-    this.previous_version(
-      'server.properties',
-      restore_as_of,
-      (err, file_contents) => {
-        if (err) {
-          callback(err, null);
-        } else {
-          callback(err, ini.decode(file_contents));
-        }
-      },
-    );
+    this.previous_version('server.properties', restore_as_of, (err, file_contents) => {
+      if (err) {
+        callback(err, null);
+      } else {
+        callback(err, ini.decode(file_contents));
+      }
+    });
   };
 
   chown = (uid, gid, callback) => {
@@ -2005,7 +1858,7 @@ export default class mineos {
         async.apply(chownr, this.env.bwd, uid, gid),
         async.apply(chownr, this.env.awd, uid, gid),
       ],
-      callback,
+      callback
     );
   };
 
@@ -2026,12 +1879,12 @@ export default class mineos {
                 async.apply(chownr, this.env.bwd, stat_info.uid, stat_info.gid),
                 async.apply(chownr, this.env.awd, stat_info.uid, stat_info.gid),
               ],
-              cb,
+              cb
             );
           });
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -2055,7 +1908,7 @@ export default class mineos {
           proc.once('close', cb);
         },
       ],
-      callback,
+      callback
     );
   };
 
@@ -2082,16 +1935,12 @@ export default class mineos {
       ],
       (err, pid) => {
         if (!err) {
-          const proc = child_process.spawn(
-            binary,
-            ['-n', niceness, '-p', pid],
-            params,
-          );
+          const proc = child_process.spawn(binary, ['-n', niceness, '-p', pid], params);
           proc.once('close', callback);
         } else {
           callback(true);
         }
-      },
+      }
     );
   };
 }
