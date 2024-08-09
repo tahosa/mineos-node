@@ -20,7 +20,7 @@
   "type": "module",
   "scripts": {
     "start": "node webui.js",
-    "test": "jest"
+    "test": "NODE_OPTIONS=\"${NODE_OPTIONS} --experimental-vm-modules\" npx jest"
   },
   "dependencies": {
     "adm-zip": "^0.4.11",
