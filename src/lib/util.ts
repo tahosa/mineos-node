@@ -22,6 +22,84 @@ export const readIni = (filepath: string, clearOnError = false): { [key: string]
 };
 
 /**
+ * Swap the order (big-endian or little-endian) of bytes in a buffer
+ *
+ * @param buffer Source buffer
+ * @returns Buffer with byte order swapped
+ */
+export const swapBytes = (buffer: Buffer): Buffer => {
+  //http://stackoverflow.com/a/7460958/1191579
+  const l = buffer.length;
+  if (l & 0x01) {
+    throw new Error('buffer length must be even');
+  }
+  for (let i = 0; i < l; i += 2) {
+    const a = buffer[i];
+    buffer[i] = buffer[i + 1];
+    buffer[i + 1] = a;
+  }
+  return buffer;
+};
+
+/**
+ * Divide a source buffer into multiple sub-buffers by splitting on a binary character
+ *
+ * @param buf Source buffer
+ * @param delimiter Binary delimiter to split on
+ * @returns Array of buffers
+ */
+export const splitBuffer = (buf: Buffer, delimiter: number): Buffer[] => {
+  //http://stackoverflow.com/a/8920913/1191579
+  const arr: Buffer[] = [];
+  let p = 0;
+
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] !== delimiter) continue;
+    if (i === 0) {
+      p = 1;
+      continue; // skip if it's at the start of buffer
+    }
+    arr.push(buf.subarray(p, i));
+    p = i + 1;
+  }
+
+  // add final part
+  if (p < buf.length) {
+    arr.push(buf.subarray(p, buf.length));
+  }
+
+  return arr;
+};
+
+/**
+ * Convert a buffer to an ASCII string, removing any null bytes (0x00)
+ * @param buf Source buffer
+ * @returns ASCII string with null bytes removed
+ */
+export const bufferToAscii = (buf: Buffer): string => {
+  let retval = '';
+  for (let i = 0; i < buf.length; i++) retval += buf[i] == 0x0000 ? '' : String.fromCharCode(buf[i]);
+  return retval;
+};
+
+/**
+ * Data returned from mcquery based on the binary output from Minecraft for a Full Stat request
+ */
+export type MinecraftFullStats = {
+  hostname: string;
+  gametype: string;
+  game_id: string;
+  version: string;
+  plugins: string;
+  map: string;
+  numplayers: string;
+  maxplayers: string;
+  hostport: string;
+  hostip: string;
+  players?: string[];
+};
+
+/**
  * Native wrapper for promises to provide a concurrency limit
  *
  * https://levelup.gitconnected.com/promise-pool-or-how-to-improve-the-performance-of-node-js-2b7d3c1f035e
