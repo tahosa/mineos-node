@@ -2,11 +2,12 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import fs from 'fs-extra';
 import ini from 'ini';
 
+import { CronTask } from './constants';
 import { Instance } from './instance';
 import { readIni } from './lib/util';
 
 jest.mock('./lib/util', () => ({
-  readIni: jest.fn()
+  readIni: jest.fn(),
 }));
 
 describe('Instance', () => {
@@ -109,7 +110,9 @@ describe('Instance', () => {
 
     test('should extract instance name from string or throw an error', () => {
       expect(Instance.extractInstanceName('/path/to/someserver', '/path/to')).toEqual('someserver');
-      expect(() => { Instance.extractInstanceName('/path/to/someserver') }).toThrowError('no instance name in /path/to/someserver');
+      expect(() => {
+        Instance.extractInstanceName('/path/to/someserver');
+      }).toThrowError('no instance name in /path/to/someserver');
     });
   });
 
@@ -129,13 +132,13 @@ describe('Instance', () => {
 
     describe('server.properties', () => {
       const mockProps = {
-        server: 'properties'
+        server: 'properties',
       };
 
       beforeAll(() => {
         jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-        (readIni as any).mockImplementation(() => {
-          return mockProps
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockProps;
         });
       });
 
@@ -149,6 +152,7 @@ describe('Instance', () => {
 
       test('should read server properties and cache result', () => {
         const inst = new Instance('server1', '/path');
+
         const spInit = inst.sp();
         expect(spInit).toEqual(mockProps);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -168,7 +172,7 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
         expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp))
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -177,7 +181,6 @@ describe('Instance', () => {
 
       test('should overlay multiple values and invalidate the cache', () => {
         const inst = new Instance('server1', '/path');
-
         const newSp = {
           server: 'newValue',
           otherProp: 'anotherValue',
@@ -188,7 +191,7 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
         expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp))
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -199,24 +202,28 @@ describe('Instance', () => {
     describe('server.config', () => {
       const mockConfig = {
         java: {
-          jarfile: 'config'
-        }
+          jarfile: 'config',
+        },
       };
 
       beforeAll(() => {
         jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-        (readIni as any).mockImplementation(() => {
-          return mockConfig
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockConfig;
         });
+      });
+
+      afterAll(() => {
+        jest.restoreAllMocks;
       });
 
       afterEach(() => {
         jest.clearAllMocks();
-        (fs.writeFileSync as any).mockClear();
       });
 
       test('should read server config and cache result', () => {
         const inst = new Instance('server1', '/path');
+
         const scInit = inst.sc();
         expect(scInit).toEqual(mockConfig);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -236,10 +243,110 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.config');
         expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.config', ini.stringify(newSc))
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.config', ini.stringify(newSc));
 
         const scCached = inst.sc();
         expect(scCached).toEqual(mockConfig);
+        expect(readIni).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('cron.config', () => {
+      let mockCron;
+
+      beforeAll(() => {
+        jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockCron;
+        });
+      });
+
+      afterAll(() => {
+        jest.restoreAllMocks;
+      });
+
+      beforeEach(() => {
+        mockCron = {
+          job1: {
+            command: 'backup',
+            source: '15 */8 * * *',
+            enabled: false,
+            msg: '',
+          },
+        };
+      });
+
+      afterEach(() => {
+        jest.clearAllMocks();
+      });
+
+      test('should read cron config and cache result', () => {
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.crons();
+        expect(ccInit).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+
+        const ccCached = inst.crons();
+        expect(ccCached).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(1);
+      });
+
+      test('should add a new cron task and invalidate the cache', () => {
+        const inst = new Instance('server1', '/path');
+        const newJob = {
+          command: 'archive',
+          source: '0 0 * * *',
+          enabled: true,
+        } as CronTask;
+
+        const ccInit = inst.addCron('newJob', newJob);
+        // New jobs start disabled
+        expect(ccInit).toEqual({ ...mockCron, newJob: { ...newJob, enabled: false } });
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          '/path/servers/server1/cron.config',
+          ini.stringify({ ...mockCron, newJob: { ...newJob, enabled: false } })
+        );
+
+        const ccCached = inst.crons();
+        expect(ccCached).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(2);
+      });
+
+      test('should delete the cron task and invalidate the cache', () => {
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.deleteCron('job1');
+        expect(ccInit).toEqual({});
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/cron.config', ini.stringify({}));
+
+        const ccCached = inst.crons();
+        expect(ccCached).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(2);
+      });
+
+      test('should set the enabled property of the cron task and invalidate the cache', () => {
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.setCron('job1', false);
+        expect(ccInit).toEqual({ job1: { ...mockCron.job1, enabled: false } });
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          '/path/servers/server1/cron.config',
+          ini.stringify({ job1: { ...mockCron.job1, enabled: false } })
+        );
+
+        const ccCached = inst.crons();
+        expect(ccCached).toEqual(mockCron);
         expect(readIni).toHaveBeenCalledTimes(2);
       });
     });

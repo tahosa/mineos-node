@@ -14,6 +14,5 @@ describe('mineos server startup', () => {
     rmdirSync(BASE_DIR);
   });
 
-  test.skip('should start the backend', async () => {
-  });
+  test.skip('should start the backend', async () => {});
 });

@@ -197,9 +197,9 @@ export class Instance {
   /**
    * Cache of memoized values. Stored so we can clear individual values.
    */
-  private _memoCache = new Map()
+  private _memoCache = new Map();
 
-   /**
+  /**
    * Read a memoized INI file and return its contents
    *
    * @param key Which INI file to read data from
@@ -285,7 +285,7 @@ export class Instance {
    * @returns List of cron configurations for this instance
    */
   crons(): CronConfig {
-    return readIni(this.env.cc) as CronConfig;
+    return this.readIni(this.env.cc) as CronConfig;
   }
 
   /**
@@ -300,6 +300,7 @@ export class Instance {
     currentCron[identifier] = config;
     currentCron[identifier].enabled = false;
     fs.writeFileSync(this.env.cc, ini.stringify(currentCron));
+    this._memoCache.delete(this.env.cc);
     return currentCron;
   }
 
@@ -313,6 +314,7 @@ export class Instance {
     const currentCron = this.crons();
     delete currentCron[identifier];
     fs.writeFileSync(this.env.cc, ini.stringify(currentCron));
+    this._memoCache.delete(this.env.cc);
     return currentCron;
   }
 
@@ -333,6 +335,7 @@ export class Instance {
 
     currentCron[identifier].enabled = enabled;
     fs.writeFileSync(this.env.cc, ini.stringify(currentCron));
+    this._memoCache.delete(this.env.cc);
     return currentCron;
   }
 
