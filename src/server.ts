@@ -1,5 +1,5 @@
-import type profile from './profiles.d/template.js';
-import { type collection } from './profiles.d/template.js';
+import type profile from './profiles.d/template';
+import { type collection } from './profiles.d/template';
 
 import Socket from 'socket.io';
 import axios from 'axios';
@@ -14,7 +14,7 @@ import which from 'which';
 import child from 'child_process';
 import rsync from 'rsync';
 import dgram from 'dgram';
-import Fireworm from 'fireworm/index.js';
+import Fireworm from 'fireworm/index';
 import request from 'request';
 import userid from 'userid';
 import progress from 'request-progress';
@@ -29,10 +29,10 @@ import { CronJob } from 'cron';
 import { randomUUID } from 'node:crypto';
 import hash from 'object-hash';
 
-import auth from './auth.js';
-import mineos, { DIRS } from './mineos.js';
-import PROFILES from './profiles.js';
-import { PromisePool } from './util.js';
+import auth from './auth';
+import mineos, { DIRS } from './mineos';
+import PROFILES from './profiles';
+import { PromisePool } from './lib/util';
 
 const SOURCES = PROFILES.profile_manifests;
 const F_OK = constants.F_OK;

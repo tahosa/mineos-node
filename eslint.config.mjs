@@ -25,6 +25,7 @@ const config = {
     '@typescript-eslint/block-spacing': 'error',
     '@typescript-eslint/ban-ts-comment': 'off',
     'import/no-unresolved': 'off',
+    'import/no-named-as-default-member': 'off',
     'no-case-declarations': 'off',
     'no-control-regex': 'off',
   },

@@ -2,17 +2,17 @@ import child from 'child_process';
 import du from 'du';
 import fs from 'fs-extra';
 import ini from 'ini';
-import memoize from 'memoize';
 import path from 'node:path';
 import procfs from 'procfs-stats';
 import { Tail } from 'tail';
 import userid from 'userid';
 import which from 'which';
+import memoize from './lib/memoize';
 
-import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants.js';
-import { Logger } from './logger.js';
-import { readIni } from './util.js';
-import { usedJavaVersion } from './java.js';
+import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants';
+import { Logger } from './lib/logger';
+import { readIni } from './lib/util';
+import { usedJavaVersion } from './java';
 
 const logger = Logger('instance');
 
@@ -27,7 +27,7 @@ for (const proc in proc_paths) {
     procfs['PROC'] = PROC_PATH; //procfs will default to /proc but we want to set it more variably
     break;
   } catch (e) {
-    logger.error(`path ${proc} does not exist, skipping`);
+    continue;
   }
 }
 
@@ -132,7 +132,6 @@ export class Instance {
           .toString('ascii')
           .replace(/\u0000/g, ' ');
       } catch (e) {
-        logger.warn(`error reading or parsing ${PROC_PATH}/${pids[i]}/cmdline`);
         continue;
       }
 
@@ -149,14 +148,16 @@ export class Instance {
       } else {
         let environ: string;
 
-        // Could not find a SCREEN process, check for JAVA
+        // This is not a SCREEN process, check for JAVA
+        // screen starts its child process with an env var STY which has the parent process ID
+        // and the string identifier of the screen session which happens to include the server name,
+        // e.g. STY=12345.mc-servername
         try {
           environ = fs
             .readFileSync(path.join(PROC_PATH, pids[i].toString(), 'environ'))
             .toString('ascii')
             .replace(/\u0000/g, ' ');
         } catch (e) {
-          logger.warn(`error reading or parsing ${PROC_PATH}/${pids[i]}/environ`);
           continue;
         }
 
@@ -194,20 +195,17 @@ export class Instance {
   }
 
   /**
+   * Cache of memoized values. Stored so we can clear individual values.
+   */
+  private _memoCache = new Map()
+
+   /**
    * Read a memoized INI file and return its contents
    *
    * @param key Which INI file to read data from
    * @returns Parsed data from the INI file
    */
-  private updateIni(key: MemoKeys) {
-    const lastWrite = fs.statSync(this.env.sp).mtime.getTime();
-    if ((key in this.timestamps && Number(this.timestamps[key]) - lastWrite !== 0) || !this.memoFiles[key]) {
-      this.timestamps[key] = lastWrite;
-      this.memoFiles[key] = memoize(readIni);
-    }
-
-    return this.memoFiles[key](this.env.sp);
-  }
+  private readIni = memoize(readIni, { cache: this._memoCache });
 
   /**
    * Get the server properties
@@ -215,7 +213,7 @@ export class Instance {
    * @returns Contents of server.properties file for this instance
    */
   sp(): ServerProperties {
-    return this.updateIni('server.properties') as ServerProperties;
+    return this.readIni(this.env.sp) as ServerProperties;
   }
 
   /**
@@ -228,8 +226,8 @@ export class Instance {
   modifySp(property: string, newValue: any): ServerProperties {
     const currentProps = this.sp();
     currentProps[property] = newValue;
-    this.timestamps['server.properties'] = 0; // reset time to force update on next read
     fs.writeFileSync(this.env.sp, ini.stringify(currentProps));
+    this._memoCache.delete(this.env.sp);
     return currentProps;
   }
 
@@ -241,11 +239,12 @@ export class Instance {
    */
   overlaySp(overlay: ServerProperties) {
     const currentProps = this.sp();
-    for (const key in Object.getOwnPropertyNames(overlay)) {
+    for (const key of Object.getOwnPropertyNames(overlay)) {
       currentProps[key] = overlay[key];
-      this.timestamps['server.properties'] = 0; // reset time to force update on next read
-      fs.writeFileSync(this.env.sp, ini.stringify(currentProps));
     }
+
+    fs.writeFileSync(this.env.sp, ini.stringify(currentProps));
+    this._memoCache.delete(this.env.sp);
     return currentProps;
   }
 
@@ -255,7 +254,7 @@ export class Instance {
    * @returns Contents of server.config file for this instance
    */
   sc(): ServerConfig {
-    return this.updateIni('server.config') as ServerConfig;
+    return this.readIni(this.env.sc) as ServerConfig;
   }
 
   /**
@@ -276,8 +275,8 @@ export class Instance {
     } else {
       currentProps[section] = { [property]: newValue } as any;
     }
-    this.timestamps['server.config'] = 0; // reset time to force update on next read
     fs.writeFileSync(this.env.sc, ini.stringify(currentProps));
+    this._memoCache.delete(this.env.sc);
     return currentProps;
   }
 

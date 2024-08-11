@@ -18,8 +18,10 @@ import net from 'net';
 import tmp from 'tmp';
 import chownr from 'chownr';
 
-import auth from './auth.js';
-import { usedJavaVersion } from './java.js';
+import memoize from './lib/memoize';
+
+import auth from './auth';
+import { usedJavaVersion } from './java';
 
 const F_OK = constants.F_OK;
 
@@ -66,7 +68,7 @@ export const SP_DEFAULTS = {
   'enable-query': 'false',
 };
 
-export const checkDependencies = (): { [key: string]: string } => {
+export const checkDependencies = memoize(() => {
   return {
     screen: which.sync('screen'),
     tar: which.sync('tar'),
@@ -74,7 +76,7 @@ export const checkDependencies = (): { [key: string]: string } => {
     java: which.sync('java'),
     'rdiff-backup': which.sync('rdiff-backup'),
   };
-};
+});
 
 export const server_list_up = () => {
   return Object.keys(server_pids_up());

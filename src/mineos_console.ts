@@ -5,7 +5,7 @@ import child_process from 'child_process';
 import getopt from 'node-getopt';
 import introspect from 'introspect';
 
-import mineos from './mineos.js';
+import mineos from './mineos';
 
 const opt = getopt
   .create([

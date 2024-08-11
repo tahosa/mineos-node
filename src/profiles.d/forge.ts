@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
 
-import profile, { type collection } from './template.js';
+import profile, { type collection } from './template';
 
 export default {
   name: 'Forge Mod',

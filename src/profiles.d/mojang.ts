@@ -2,8 +2,8 @@ import axios from 'axios';
 import path from 'path';
 import fs from 'fs-extra';
 
-import { PromisePool } from '../util.js';
-import profile, { type collection } from './template.js';
+import { PromisePool } from '../lib/util';
+import profile, { type collection } from './template';
 
 type MojangVersion = {
   id: string;

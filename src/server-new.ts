@@ -1,12 +1,12 @@
-import type profile from './profiles.d/template.js';
+import type profile from './profiles.d/template';
 
 import fs from 'fs-extra';
 import path from 'node:path';
 import Socket from 'socket.io';
 import which from 'which';
 
-import { DIRS } from './constants.js';
-import { Logger } from './logger.js';
+import { DIRS } from './constants';
+import { Logger } from './lib/logger';
 import child from 'node:child_process';
 
 const logger = Logger('server');

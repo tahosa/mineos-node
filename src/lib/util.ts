@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import ini from 'ini';
 import { EventEmitter } from 'node:stream';
 
-import { Logger } from './logger.js';
+import { Logger } from './logger';
 
 const logger = Logger('util');
 
