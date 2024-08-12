@@ -14,8 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const compat = new FlatCompat({
-  baseDirectory: __dirname
-})
+  baseDirectory: __dirname,
+});
 
 const config = {
   rules: {
@@ -35,7 +35,7 @@ export default [
   {
     files: ['**/*.ts'],
     ignores: ['html/**', 'dist/**', 'src/profiles.d/template.ts'],
-    languageOptions: { globals: globals.browser }
+    languageOptions: { globals: globals.browser },
   },
   pluginJs.configs.recommended,
   ...eslintTypescript.configs.recommended,

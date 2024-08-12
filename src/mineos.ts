@@ -8,7 +8,7 @@ import logging from 'winston';
 import ini from 'ini';
 import DecompressZip from 'decompress-zip';
 import mcquery from 'mcquery';
-import rsync from 'rsync';
+import rsync from 'rsync2';
 import { Tail } from 'tail';
 import strftime from 'strftime';
 import userid from 'userid';

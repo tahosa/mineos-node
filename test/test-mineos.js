@@ -2,8 +2,6 @@ import * as fs from 'fs-extra'
 import * as path from 'path'
 import * as async from 'async'
 import * as mineos from '../mineos'
-import * as userid from 'userid'
-import * as whoami from 'whoami'
 import * as ini from 'ini'
 
 
@@ -11,7 +9,6 @@ let test = exports;
 
 let BASE_DIR = '/home/runner/minecraft';
 let FS_DELAY_MS = 200;
-let PROC_START_DELAY_MS = 200;
 
 let OWNER_CREDS = {
   uid: 1001,

@@ -1,12 +1,18 @@
 import child from 'child_process';
+import chownr from 'chownr';
+import DecompressZip from 'decompress-zip';
 import du from 'du';
 import fs from 'fs-extra';
 import ini from 'ini';
 import mcquery from 'mcquery';
 import net from 'net';
+import { constants } from 'node:fs';
 import path from 'node:path';
 import procfs from 'procfs-stats';
+import rsync from 'rsync2';
+import strftime from 'strftime';
 import { Tail } from 'tail';
+import tmp from 'tmp';
 import userid from 'userid';
 import which from 'which';
 
@@ -14,6 +20,7 @@ import { Logger } from './lib/logger';
 import memoize from './lib/memoize';
 import { bufferToAscii, type MinecraftFullStats, readIni, splitBuffer, swapBytes } from './lib/util';
 
+import { existsOnSystem } from './auth-new';
 import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants';
 
 const logger = Logger('instance');
@@ -41,6 +48,17 @@ type QueryResponse = {
   motd: string;
   playersOnline: number;
   playersMax: number;
+};
+type IncrementListItem = {
+  step: string;
+  time: string;
+  size: string;
+  cum: string;
+};
+type ArchiveListItem = {
+  time: Date;
+  size: number;
+  filename: string;
 };
 
 export class Instance {
@@ -159,18 +177,18 @@ export class Instance {
   /**
    * Get the instance name from a longer path string
    *
-   * @param path Path to extract instance name from
+   * @param filepath Path to extract instance name from
    * @param baseDir Base directory string (default: 'servers')
    * @returns Instance name, if one is found
    * @throws Error if no match is found
    */
-  static extractInstanceName(path: string, baseDir: string = DIRS.servers): string {
+  static extractInstanceName(filepath: string, baseDir: string = DIRS.servers): string {
     const re = new RegExp(`${baseDir}/([a-zA-Z0-9_.]+)`);
-    const matches = re.exec(path);
+    const matches = re.exec(filepath);
     if (matches) {
       return matches[1];
     } else {
-      throw new Error(`no instance name in ${path}`);
+      throw new Error(`no instance name in ${filepath}`);
     }
   }
 
@@ -217,7 +235,7 @@ export class Instance {
    * @param overlay Partial or complete server.properties values to set on this instance
    * @returns The complete updated server.properties values
    */
-  overlaySp(overlay: ServerProperties) {
+  overlaySp(overlay: ServerProperties): ServerProperties {
     const currentProps = this.sp();
     for (const key of Object.getOwnPropertyNames(overlay)) {
       currentProps[key] = overlay[key];
@@ -275,7 +293,7 @@ export class Instance {
    * @param config Cron task config to add with schedule and task
    * @returns Current cron configurations including the one just added
    */
-  addCron(identifier: string, config: CronTask) {
+  addCron(identifier: string, config: CronTask): CronConfig {
     const currentCron = this.crons();
     currentCron[identifier] = config;
     currentCron[identifier].enabled = false;
@@ -346,7 +364,7 @@ export class Instance {
      * @param port Port number
      */
     const sendQueryPacket = async (port: number): Promise<QueryResponse> => {
-      return new Promise((res, rej) => {
+      return await new Promise((resolve, reject) => {
         const socket = new net.Socket();
         const query = 'modern';
         const QUERIES = {
@@ -382,7 +400,7 @@ export class Instance {
 
           if (modern_split.length == 5) {
             // modern ping to modern server
-            res({
+            resolve({
               protocol: parseInt(modern_split[0]),
               serverVersion: modern_split[1],
               motd: modern_split[2],
@@ -392,7 +410,7 @@ export class Instance {
           } else if (legacy_split.length == 3) {
             if (String.fromCharCode(legacy_split[0][-1]) == '\u0000') {
               // modern ping to legacy server
-              res({
+              resolve({
                 serverVersion: '',
                 motd: bufferToAscii(legacy_split[0].subarray(3, legacy_split[0].length - 1)),
                 playersOnline: parseInt(bufferToAscii(legacy_split[1])),
@@ -406,7 +424,7 @@ export class Instance {
           logger.error(`ping: MC Server not available on port ${port}`);
           //logger.debug(err);
           //logger.debug(err.stack);
-          rej(err);
+          reject(err);
         });
 
         socket.connect({ port: port });
@@ -434,19 +452,24 @@ export class Instance {
     const query = new mcquery('localhost', port);
     await query.connect();
 
-    return await new Promise((res, rej) => {
+    return await new Promise((resolve, reject) => {
       query.full_stat((err, stat) => {
         if (err) {
-          rej(err);
+          reject(err);
         }
 
-        res(stat);
+        resolve(stat);
       });
     });
   }
 
-  async create(owner: { uid: number; gid: number }) {
-    if ((await this.isCreated()) || (await this.isUp())) {
+  /**
+   * Create the necessary folders and files for this instance if they don't already exist
+   *
+   * @param owner Owner information to use when creating files and folders
+   */
+  async create(owner: { uid: number; gid: number }, unconventional: boolean = false): Promise<void> {
+    if ((await this.exists()) || (await this.isUp())) {
       throw new Error(`instance ${this.name} already exists or is running`);
     }
 
@@ -466,15 +489,459 @@ export class Instance {
     fs.ensureFileSync(this.env.cc);
     fs.chownSync(this.env.cc, owner.uid, owner.gid);
 
-    // Write defaults
-    this.overlaySp(SP_DEFAULTS);
-    this.modifySc('java', 'java_binary', '');
-    this.modifySc('java', 'java_xmx', '256');
-    this.modifySc('onreboot', 'start', false);
+    if (!unconventional) {
+      // Write defaults
+      this.overlaySp(SP_DEFAULTS);
+      this.modifySc('java', 'java_binary', '');
+      this.modifySc('java', 'java_xmx', '256');
+      this.modifySc('onreboot', 'start', false);
+    } else {
+      this.modifySc('minecraft', 'unconventional', true);
+    }
   }
 
   /**
-   * Send a command to the Minecraft console
+   * Create the necessary folders and files for this instance from an archive
+   *
+   * @param owner Owner information to use when creating files and folders
+   * @param filepath Archive path to copy from
+   */
+  async createFromArchive(owner: { uid: number; gid: number }, filepath: string): Promise<void | void[]> {
+    /**
+     *
+     * @param sourceDir Source directory with
+     * @returns
+     */
+    const moveToParentDir = async (sourceDir: string) => {
+      let remainder = '';
+
+      const parentFiles = await fs.promises.readdir(sourceDir);
+      if (parentFiles.length === 1) {
+        remainder = parentFiles[0];
+      } else if (parentFiles.length === 4) {
+        const spIdx = parentFiles.indexOf('server.properties');
+        const scIdx = parentFiles.indexOf('server.config');
+        const ccIdx = parentFiles.indexOf('cron.config');
+
+        // Remove default files from the list
+        if (spIdx >= 0) {
+          parentFiles.splice(spIdx, 1);
+        }
+        if (scIdx >= 0) {
+          parentFiles.splice(scIdx, 1);
+        }
+        if (ccIdx >= 0) {
+          parentFiles.splice(ccIdx, 1);
+        }
+
+        remainder = parentFiles[0];
+      } else {
+        return Promise.reject(`${sourceDir} is not a valid parent directory`);
+      }
+
+      const oldDir = path.join(sourceDir, remainder);
+      if (!(await fs.promises.lstat(oldDir)).isDirectory()) {
+        return Promise.reject(`inner path ${oldDir} is not a directory`);
+      }
+
+      const innerFiles = await fs.promises.readdir(oldDir);
+      return await Promise.all(
+        innerFiles.map((file) => {
+          const oldPath = path.join(oldDir, file);
+          const newPath = path.join(sourceDir, file);
+          return new Promise<void>((resolve, reject) => {
+            fs.move(oldPath, newPath, { overwrite: true }, (err) => {
+              if (err) {
+                reject(err);
+              }
+
+              resolve();
+            });
+          });
+        })
+      );
+    };
+
+    let destFilepath: string = '';
+
+    if (filepath.match(/\//))
+      //if it has a '/', its hopefully an absolute path
+      destFilepath = filepath;
+    // if it doesn't treat it as being from /import/
+    else destFilepath = path.join(this.env.baseDir, DIRS['import'], filepath);
+
+    const split = destFilepath.split('.');
+    let extension = split.pop();
+
+    if (extension == 'gz') if (split.pop() == 'tar') extension = 'tar.gz';
+
+    switch (extension) {
+      case 'zip':
+        const unzipper = async (filepath: string) => {
+          return await new Promise((resolve, reject) => {
+            const unzipper = new DecompressZip(filepath);
+
+            unzipper.on('error', (err) => {
+              reject(err);
+            });
+
+            unzipper.on('extract', () => {
+              resolve(moveToParentDir(this.env.cwd));
+            });
+
+            unzipper.extract({
+              path: this.env.cwd,
+            });
+          });
+        };
+
+        await this.create(owner);
+        await unzipper(destFilepath);
+        return await this.chown(owner.uid, owner.gid);
+
+      case 'tar.gz':
+      case 'tgz':
+      case 'tar':
+        const binary = which.sync('tar');
+        const args = ['-xf', destFilepath];
+        const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
+
+        await this.create(owner);
+        const proc = child.spawn(binary, args, params);
+        return await new Promise((resolve, reject) => {
+          proc.once('exit', (code) => {
+            if (code) {
+              reject(code);
+            }
+
+            resolve();
+          });
+        });
+    }
+  }
+
+  /**
+   * Delete the files for this instance
+   */
+  async delete(): Promise<void[]> {
+    if (!(await this.exists()) || (await this.isUp())) {
+      return Promise.reject(`instance ${this.name} does not exist or is running`);
+    }
+
+    const rmOptions = { recursive: true, force: true };
+    return await Promise.all([
+      fs.promises.rm(this.env.cwd, rmOptions),
+      fs.promises.rm(this.env.bwd, rmOptions),
+      fs.promises.rm(this.env.awd, rmOptions),
+    ]);
+  }
+
+  /**
+   * Get the startup arguments for this instance
+   *
+   * @returns Arguments to pass to screen to start the server
+   */
+  getStartArgs(): string[] {
+    const jar = (unconventional: boolean = false): string[] => {
+      const systemJava = which.sync('java');
+      const javaConfig = this.sc().java;
+      const javaArgs = {
+        binary: javaConfig?.java_binary || systemJava,
+        xmx: parseInt(javaConfig?.java_xmx) || 0,
+        xms: parseInt(javaConfig?.java_xms) || 0,
+        jarfile: javaConfig?.jarfile,
+        jar_args: javaConfig?.jar_args || '',
+        java_tweaks: javaConfig?.java_tweaks || null,
+      };
+
+      if (!javaArgs.binary) {
+        throw new Error('no java binary assigned for instance');
+      }
+
+      if (javaArgs.xmx <= 0) {
+        throw new Error('Xmx heapsize must be positive integer >= 0');
+      }
+
+      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
+        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
+      }
+
+      if (!javaArgs.jarfile) {
+        throw new Error('instance not assigned a runnable jar');
+      }
+
+      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
+
+      if (javaArgs.xmx) {
+        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
+      }
+      if (javaArgs.xms) {
+        screenArgs.push(`-Xms${javaArgs.xms}M`);
+      }
+
+      if (javaArgs.java_tweaks) {
+        screenArgs.push(...javaArgs.java_tweaks.split(' '));
+      }
+
+      screenArgs.push('-jar', javaArgs.jarfile);
+
+      screenArgs.push(...javaArgs.jar_args.split(' '));
+
+      if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
+        screenArgs.push('--installServer');
+      }
+
+      return screenArgs;
+    };
+
+    const phar = (): string[] => {
+      let binary: string;
+
+      try {
+        const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
+        fs.accessSync(php7, constants.F_OK);
+        binary = './bin/php7/bin/php';
+      } catch (e) {
+        binary = './bin/php5/bin/php';
+      }
+
+      const pharFile = this.sc().java?.jarfile;
+      if (!pharFile) {
+        throw new Error('instance not assigned a runnable phar');
+      }
+
+      return ['-dmS', `mc-${this.name}`, binary, pharFile];
+    };
+
+    const cuberite = (): string[] => {
+      return ['-dmS', `mc-${this.name}`, './Cuberite'];
+    };
+
+    const sc = this.sc();
+    const jarfile = sc.java?.jarfile;
+    const unconventional = sc.minecraft?.unconventional;
+
+    if (!jarfile) {
+      throw new Error('Cannot start instance without a designated jar/phar');
+    } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
+      return jar(unconventional);
+    } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
+      return phar();
+    } else if (jarfile === 'Cuberite') {
+      return cuberite();
+    }
+
+    throw new Error(`unknown jar type ${jarfile}`);
+  }
+
+  /**
+   * Copy files from the selected profile to the instance server directory
+   *
+   * @returns rsync exit status
+   */
+  async copyProfile(): Promise<number> {
+    const rsyncProfile = async (source: string, dest: string, username: string, groupname: string) => {
+      const obj = rsync.build({
+        source: source,
+        destination: dest,
+        flags: 'au',
+        shell: 'ssh',
+      });
+
+      obj.set('chown', `${username}:${groupname}`);
+      obj.set('chmod', 'ug=rwX');
+
+      return (await obj.execute()) as Promise<number>;
+    };
+
+    if (!(await this.exists()) || this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is running`);
+    }
+
+    const profilePath = this.sc().minecraft?.profile;
+
+    if (!profilePath) {
+      return Promise.reject('profile not set for this instance');
+    }
+
+    const ownerInfo = await this.getOwner();
+    const source = path.join(this.env.pwd, profilePath) + path.sep;
+    const dest = this.env.cwd + path.sep;
+
+    return await rsyncProfile(source, dest, ownerInfo.username, ownerInfo.groupname);
+  }
+
+  /**
+   * Get a list of files that are in the selected profile but not in the instance directory
+   *
+   * @param profile Profile name to compare
+   * @returns List of files this instance is missing from the profile
+   */
+  async profileDelta(profile: string): Promise<string[]> {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const obj = rsync.build({
+      source: path.join(this.env.pwd, profile) + '/',
+      destination: this.env.cwd + '/',
+      flags: 'vrun', // verbose, recursive, skip-remote-newer, dry-run
+      shell: 'ssh',
+      output: [
+        (output) => {
+          stdout.push(output);
+        },
+        (output) => {
+          stderr.push(output);
+        },
+      ],
+    });
+
+    const rsyncStatus = await obj.execute();
+
+    if (rsyncStatus) {
+      return Promise.reject(rsyncStatus);
+    }
+
+    // Clear off the header and trailer from rsync
+    stdout.shift();
+    stdout.pop();
+
+    // Clean up output to only filenames
+    return stdout.reduce<string[]>((acc: string[], file: string) => {
+      if (file.match(/sent \d+ bytes/)) {
+        // Skip for known pattern on freebsd: 'sent 79 bytes  received 19 bytes  196.00 bytes/sec'
+        return acc;
+      }
+
+      acc.push(...file.split('\n').filter((f) => f));
+      return acc;
+    }, []);
+  }
+
+  /**
+   * Start the instance
+   */
+  async start(): Promise<void> {
+    if (!(await this.exists()) || this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is already running`);
+    }
+
+    const owner = await this.getOwner();
+    const startArgs = this.getStartArgs();
+    const profileStatus = await this.profileDelta(this.sc().minecraft?.profile || '').catch((err) => {
+      if (err === 23) {
+        // source dir of profile non-existent
+        // ignore issue; profile non-essential to start (server_jar is req'd only)
+        return [];
+      }
+
+      throw err;
+    });
+
+    if (profileStatus.length > 0) {
+      await this.copyProfile();
+    }
+
+    const binary = which.sync('screen');
+    const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
+
+    const proc = child.spawn(binary, startArgs || [], params);
+    return await new Promise<void>((resolve, reject) => {
+      proc.once('close', (code) => {
+        if (code) {
+          reject(code);
+        }
+        resolve();
+      });
+
+      // Wait 2 seconds for the server to be considered "up"
+      setTimeout(resolve, 2000);
+    });
+  }
+
+  /**
+   * Stop the instance by sending the stop command
+   */
+  async stop(): Promise<void> {
+    const interval = 200;
+    let iterations = 0;
+    const MAX_ITERATIONS_TO_QUIT = 150;
+
+    if (!(await this.exists()) || !this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    }
+
+    await this.stuff('stop');
+    while (iterations < MAX_ITERATIONS_TO_QUIT) {
+      const running = await new Promise((res) => {
+        setTimeout(() => res(this.name in Instance.listRunningInstancePids()), interval);
+      });
+
+      if (!running) {
+        return;
+      }
+      iterations++;
+    }
+    return Promise.reject(
+      `instance ${this.name} did not stop after ${((interval * MAX_ITERATIONS_TO_QUIT) / 1000).toFixed(1)} seconds`
+    );
+  }
+
+  /**
+   * Restart the instance
+   */
+  async restart(): Promise<void> {
+    await this.stop();
+    return await this.start();
+  }
+
+  /**
+   * Stop the instance and run a backup
+   */
+  async stopAndBackup(): Promise<void> {
+    await this.stop();
+    return await this.backup();
+  }
+
+  /**
+   * Kill the java process for this instance
+   */
+  async kill(): Promise<void> {
+    const pids = Instance.listRunningInstancePids();
+
+    if (!(this.name in pids)) {
+      return;
+    } else {
+      const javaPid = pids[this.name].java;
+      if (!javaPid) {
+        return Promise.reject(`instance ${this.name} has no java process to kill`);
+      }
+
+      process.kill(javaPid, 'SIGKILL');
+
+      const interval = 200;
+      const MAX_ITERATIONS_TO_QUIT = 150;
+      let iterations = 0;
+
+      while (iterations < MAX_ITERATIONS_TO_QUIT) {
+        const running = await new Promise((res) => {
+          setTimeout(() => res(this.name in Instance.listRunningInstancePids()), interval);
+        });
+
+        if (!running) {
+          return;
+        }
+
+        iterations++;
+      }
+      return Promise.reject(
+        `instance ${this.name} did not stop after ${((interval * MAX_ITERATIONS_TO_QUIT) / 1000).toFixed(1)} seconds`
+      );
+    }
+  }
+
+  /**
+   * Send a command to the Minecraft process
    *
    * @param command Command to send
    */
@@ -483,15 +950,392 @@ export class Instance {
       cwd: this.env.cwd,
       ...(await this.getOwner()),
     };
-    const binary = await which('screen');
+    const binary = which.sync('screen');
 
-    if (!(await this.isCreated()) && (await this.isUp())) {
+    if (!(await this.exists()) && (await this.isUp())) {
       throw new Error(`instance ${this.name} does not exist or is not running`);
     }
 
     return child
-      .execFileSync(binary, ['-s', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params)
+      .execFileSync(binary, ['-S', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params)
       .toString('utf-8');
+  }
+
+  /**
+   * Send a save command to the Minecraft process
+   *
+   * @param delay Seconds to wait
+   */
+  async saveall(delay: number = 5): Promise<void> {
+    const FALLBACK_DELAY_SECONDS = 5;
+
+    if (!(await this.exists()) || !this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    }
+    await this.stuff('save-all');
+    return await new Promise<void>((res) => {
+      setTimeout(() => res(), (delay || FALLBACK_DELAY_SECONDS) * 1000);
+    });
+  }
+
+  /**
+   *
+   * @returns True if the server was able to
+   */
+  async saveallLatestLog(): Promise<void> {
+    if (!(await this.exists()) || !this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    }
+
+    const TIMEOUT_LENGTH = 10 * 1000;
+    let tail: Tail;
+
+    return await new Promise<void>((resolve, reject) => {
+      try {
+        tail = new Tail(path.join(this.env.cwd, 'logs/latest.log'));
+      } catch (e) {
+        reject(`could not create tail on logs/latest.log for instance ${this.name}`);
+      }
+
+      tail.on('line', (data) => {
+        const match = data.match(/INFO]: Saved the world/);
+        if (match) {
+          //previously on, return true
+          clearTimeout(timeout);
+          tail.unwatch();
+          resolve();
+        }
+      });
+
+      const timeout = setTimeout(() => {
+        tail.unwatch();
+        reject(`timeout waiting for instance ${this.name} to save`);
+      }, TIMEOUT_LENGTH);
+    });
+  }
+
+  /**
+   * Create a tar archive of the instance
+   *
+   * @param forceSave Force the server to save before archiving
+   * @returns
+   */
+  async archive(forceSave: boolean = false): Promise<void> {
+    const binary = which.sync('tar');
+    const filename = `server-${this.name}_${strftime('%Y-%m-%d_%H-%M-%S')}.tgz`;
+    const args = ['czf', path.join(this.env.awd, filename), '.'];
+
+    const owner = await this.getOwner();
+    const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
+    const autosave = await this.getAutosaveState();
+
+    if (forceSave) {
+      try {
+        await this.stuff('save-off');
+        await this.saveallLatestLog();
+      } catch (e) {
+        // We can still archive if the server isn't running
+        logger.warn(`could not force save ${this.name} before archiving:`, e);
+      }
+    }
+
+    const proc = child.spawn(binary, args, params);
+    return await new Promise<void>((resolve, reject) => {
+      proc.once('exit', (code) => {
+        if (forceSave && autosave) {
+          this.stuff('save-on');
+        }
+
+        if (code) {
+          reject(code);
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Create an rdiff-backup incerement of the instance
+   */
+  async backup(): Promise<void> {
+    const binary = which.sync('rdiff-backup');
+    const args = ['--exclude', path.join(this.env.cwd, 'dynmap'), `${this.env.cwd}/`, this.env.bwd];
+    const owner = await this.getOwner();
+    const params = { cwd: this.env.bwd, uid: owner.uid, gid: owner.gid };
+
+    return await new Promise((resolve, reject) => {
+      const proc = child.spawn(binary, args, params);
+      proc.once('exit', (code) => {
+        if (code) {
+          reject(code);
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Restore an rdiff-backup increment of the instance
+   *
+   * @param step Increment to restore
+   */
+  async restore(step: number): Promise<void> {
+    const binary = which.sync('rdiff-backup');
+    const args = ['--restore-as-of', `${step}`, '--force', this.env.bwd, this.env.cwd];
+    const params = { cwd: this.env.bwd };
+
+    return await new Promise((resolve, reject) => {
+      const proc = child.spawn(binary, args, params);
+      proc.once('exit', (code) => {
+        if (code) {
+          reject(code);
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Get the contents of a a file as it was in a previous backup increment
+   *
+   * @param filename File to read from the backup
+   * @param increment rdiff-backup increment number to get file from
+   * @returns
+   */
+  async previousVersion(filename: string, increment: number): Promise<string> {
+    const binary = which.sync('rdiff-backup');
+    const abs_filepath = path.join(this.env.bwd, filename);
+
+    return await new Promise((resolve, reject) => {
+      tmp.file((err, new_file_path) => {
+        if (err) {
+          reject(err);
+        }
+
+        const args = ['--force', '--restore-as-of', `${increment}`, abs_filepath, new_file_path];
+        const params = { cwd: this.env.bwd };
+        const proc = child.spawn(binary, args, params);
+
+        proc.on('error', (code) => {
+          reject(code);
+        });
+
+        proc.on('exit', (code) => {
+          if (code == 0) {
+            fs.readFile(new_file_path, (inErr, data) => {
+              if (inErr) {
+                reject(inErr);
+                return;
+              }
+
+              resolve(data.toString());
+            });
+          } else {
+            reject(code);
+          }
+        });
+      });
+    });
+  }
+
+  /**
+   * Get the list of backup increments for this instance
+   *
+   * @returns List of increments ordered by date desc
+   */
+  async listIncrements(): Promise<IncrementListItem[]> {
+    const binary = which.sync('rdiff-backup');
+    const args = ['--list-increments', this.env.bwd];
+    const params = { cwd: this.env.bwd };
+
+    // Increment entry looks like:
+    // increments.2024-08-12T00:15:00Z.dir   Mon Aug 12 00:15:00 2024
+    const regex = /^.+ +(\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})/;
+    const increments: IncrementListItem[] = [];
+
+    return await new Promise((resolve, reject) => {
+      const rdiff = child.spawn(binary, args, params);
+
+      rdiff.stdout.on('data', (data) => {
+        const buffer = Buffer.from(data, 'ascii');
+        // Force increments into consistent order - date desc
+        const lines = buffer.toString('ascii').split('\n').sort().reverse();
+        let incrs = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+          const match = lines[i].match(regex);
+          if (match) {
+            increments.push({
+              step: `${incrs}B`,
+              time: match[1],
+              size: '',
+              cum: '',
+            });
+            incrs += 1;
+          }
+        }
+      });
+
+      rdiff.on('error', (code) => {
+        if (code) {
+          // branch if path does not exist
+          reject(code);
+        }
+      });
+
+      rdiff.on('exit', (code) => {
+        if (code == 0) {
+          // branch if all is well
+          resolve(increments);
+        } else {
+          // branch if dir exists, not an rdiff-backup dir
+          reject(code);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get the list of backup increments for this instance with their sizes
+   *
+   * @returns List of increments with size information ordered by date desc
+   */
+  async listIncrementSizes(): Promise<IncrementListItem[]> {
+    const binary = which.sync('rdiff-backup');
+    const args = ['--list-increment-sizes', this.env.bwd];
+    const params = { cwd: this.env.bwd };
+
+    // Increment entry looks like:
+    // Mon Aug 12 16:15:00 2024         1.81 GB           1.81 GB   (current mirror)
+    const regex = /^(\w.*?) {3,}(.*?) {2,}([^ ]+ \w*)/;
+    const increments: IncrementListItem[] = [];
+
+    return await new Promise((resolve, reject) => {
+      const rdiff = child.spawn(binary, args, params);
+
+      rdiff.stdout.on('data', (data) => {
+        const buffer = Buffer.from(data, 'ascii');
+        const lines = buffer
+          .toString('ascii')
+          .split('\n')
+          .reduce<RegExpMatchArray[]>((acc, line) => {
+            const match = line.match(regex);
+            if (!match) {
+              return [];
+            }
+
+            acc.push(match);
+            return acc;
+          }, [])
+          // Force increments into consistent order - date desc
+          .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
+        let incrs = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+          const match = lines[i];
+          if (match) {
+            increments.push({
+              step: `${incrs}B`,
+              time: match[1],
+              size: match[2],
+              cum: match[3],
+            });
+            incrs += 1;
+          }
+        }
+      });
+
+      rdiff.on('error', (code) => {
+        if (code) {
+          // branch if path does not exist
+          reject(code);
+        }
+      });
+
+      rdiff.on('exit', (code) => {
+        if (code == 0) {
+          // branch if all is well
+          resolve(increments);
+        } else {
+          // branch if dir exists, not an rdiff-backup dir
+          reject(code);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get all archive files for this instance
+   *
+   * @returns List of archive files sorted by date desc
+   */
+  async listArchives(): Promise<ArchiveListItem[]> {
+    const awd = this.env['awd'];
+    const all_info: ArchiveListItem[] = [];
+
+    const files = await fs.promises.readdir(awd);
+    await Promise.all(
+      files.map(async (file) => {
+        const statInfo = await fs.promises.stat(path.join(awd, file));
+        all_info.push({
+          time: statInfo.mtime,
+          size: statInfo.size,
+          filename: file,
+        });
+      })
+    );
+
+    return all_info.sort((a, b) => b.time.getTime() - a.time.getTime());
+  }
+
+  /**
+   * Delete backup increments older than a given increment
+   *
+   * @param step Increment number to prune backups older than
+   */
+  async prune(step: number): Promise<void> {
+    const binary = which.sync('rdiff-backup');
+    const args = ['--force', '--remove-older-than', `${step}`, this.env.bwd];
+    const params = { cwd: this.env.bwd };
+
+    return await new Promise((resolve, reject) => {
+      const proc = child.spawn(binary, args, params);
+
+      proc.on('error', (code) => {
+        if (code) {
+          // branch if path does not exist
+          reject(code);
+        }
+      });
+
+      proc.on('exit', (code) => {
+        if (code == 0) {
+          // branch if all is well
+          resolve();
+        } else {
+          // branch if dir exists, not an rdiff-backup dir
+          reject(code);
+        }
+      });
+    });
+  }
+
+  /**
+   * Delete an archive copy of this isntance
+   *
+   * @param filename Archive file to delete
+   */
+  async deleteArchive(filename: string): Promise<void> {
+    const archive_path = path.join(this.env['awd'], filename);
+
+    return await new Promise((resolve, reject) => {
+      fs.remove(archive_path, (err) => {
+        if (err) {
+          reject(err);
+        }
+        resolve();
+      });
+    });
   }
 
   /**
@@ -509,11 +1353,116 @@ export class Instance {
   }
 
   /**
+   *
+   * @param uid
+   * @param gid
+   * @returns
+   */
+  async chown(uid: number, gid: number): Promise<void[]> {
+    if (!(await existsOnSystem(uid, gid)).every((t) => t)) {
+      return Promise.reject(`uid ${uid} or gid ${gid} does not exist`);
+    } else if (!(await this.exists())) {
+      return Promise.reject(`instance ${this.name} does not exist`);
+    }
+
+    return await Promise.all(
+      [this.env.cwd, this.env.bwd, this.env.awd].map(
+        (path) =>
+          new Promise<void>((resolve, reject) => {
+            chownr(path, uid, gid, (err) => {
+              if (err) {
+                reject(err);
+                return;
+              }
+              resolve();
+            });
+          })
+      )
+    );
+  }
+
+  /**
+   * Recursively set the ownership of the archive, backup, and instance folders to the
+   * owner and group of the instance folder.
+   *
+   * Duplicates functionality of chown because it does not assume sp existence
+   */
+  async fixOwnership(): Promise<void[]> {
+    const { uid, gid } = await fs.promises.stat(this.env.cwd);
+    await Promise.all([this.env.bwd, this.env.awd].map((path) => fs.ensureDir(path)));
+    return await Promise.all(
+      [this.env.cwd, this.env.bwd, this.env.awd].map(
+        (path) =>
+          new Promise<void>((resolve, reject) => {
+            chownr(path, uid, gid, (err) => {
+              if (err) {
+                reject(err);
+                return;
+              }
+              resolve();
+            });
+          })
+      )
+    );
+  }
+
+  /**
+   * Run the FTB Installer script
+   */
+  async runInstaller(): Promise<void> {
+    if (!(await this.exists()) || !this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    }
+
+    const args = ['FTBInstall.sh'];
+    const owner = await this.getOwner();
+    const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
+    const binary = await which('sh');
+
+    return await new Promise((resolve, reject) => {
+      const proc = child.spawn(binary, args, params);
+      proc.once('close', (code) => {
+        if (code) {
+          reject(code);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Set the process priority to a new relative value
+   *
+   * @param priority Process priority
+   */
+  async renice(priority: string): Promise<void> {
+    const javaPid = this.getChildPid('java');
+    if (!(await this.exists()) || !this.isUp() || !javaPid) {
+      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    }
+
+    const owner = await this.getOwner();
+    const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
+    const binary = which.sync('renice');
+    return await new Promise((resolve, reject) => {
+      const proc = child.spawn(binary, ['-n', priority, '-p', `${javaPid}`], params);
+      proc.once('close', (err) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
    * Get the status of the current server by checking if server.properties exists
    *
    * @returns True if server.properties exists, false otherwise
    */
-  async isCreated(): Promise<boolean> {
+  async exists(): Promise<boolean> {
     return await fs.promises.stat(this.env.sp).then((statData) => !!statData);
   }
 
@@ -550,14 +1499,14 @@ export class Instance {
   async getJavaProcessStats(): Promise<procfs.Status> {
     const pids = Instance.listRunningInstancePids();
     if (this.name in pids) {
-      return await new Promise((res, rej) => {
+      return await new Promise((resolve, reject) => {
         const ps = procfs(Number(pids[this.name].java));
 
         ps.status((err, data) => {
           if (err) {
-            rej(err);
+            reject(err);
           }
-          res(data);
+          resolve(data);
         });
       });
     } else {
@@ -572,35 +1521,35 @@ export class Instance {
    * @returns Size in
    */
   async du(dir: 'awd' | 'bwd' | 'cwd'): Promise<number> {
-    let path;
+    let filepath;
     switch (dir) {
       case 'awd':
-        path = this.env.awd;
+        filepath = this.env.awd;
         break;
       case 'bwd':
-        path = this.env.bwd;
+        filepath = this.env.bwd;
         break;
       case 'cwd':
-        path = this.env.cwd;
+        filepath = this.env.cwd;
         break;
       default:
         return Promise.reject(`invalid directory: ${dir}`);
     }
 
     const TIMEOUT = 3 * 1000; // Default to 3s timeout
-    return await new Promise((res, rej) => {
+    return await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        rej('timeout getting directory usage');
+        reject('timeout getting directory usage');
       }, TIMEOUT);
 
-      du(path, { disk: true }, (err, size) => {
+      du(filepath, { disk: true }, (err, size) => {
         clearTimeout(timer);
 
         if (err) {
-          rej(err);
+          reject(err);
         }
 
-        res(Number(size));
+        resolve(Number(size));
       });
     });
   }
@@ -610,7 +1559,7 @@ export class Instance {
    *
    * @returns Whether or not this instance has accepted the Minecraft server EULA
    */
-  async eulaAccepted(): Promise<boolean> {
+  async eulaStatus(): Promise<boolean> {
     return await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt')).then((data) => {
       const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
       const lines = data.toString().split('\n');
@@ -620,6 +1569,17 @@ export class Instance {
       }
       return matches;
     });
+  }
+
+  /**
+   * Accept the Minecraft server EULA by creating eula.txt with the contents 'eula=true'
+   */
+  async acceptEula() {
+    const EULA_PATH = path.join(this.env.cwd, 'eula.txt');
+    await fs.outputFile(EULA_PATH, 'eula=true');
+
+    const dirStat = await fs.promises.stat(this.env.cwd);
+    return await fs.promises.chown(EULA_PATH, dirStat.uid, dirStat.gid);
   }
 
   /**
