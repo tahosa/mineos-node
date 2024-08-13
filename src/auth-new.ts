@@ -1,12 +1,16 @@
 import crypt from 'apache-crypt';
-import fs from 'fs-extra';
+import fs from 'node:fs';
 import hash from 'sha512crypt-node';
 import nodePosix from 'posix';
 import passwd from 'etc-passwd';
 import userid from 'userid';
 
+import { Logger } from './lib/logger';
+
 // @ts-expect-error: Typescript cannot resolve this node-gyp module for some reason
 import authenticatePam from 'authenticate-pam';
+
+const logger = Logger.child({ service: 'auth' });
 
 /**
  * Attempt to authenticate against the system using PAM, /etc/shadow, or posix authentication
@@ -15,8 +19,8 @@ import authenticatePam from 'authenticate-pam';
  * @param plaintext Plaintext password
  * @returns True if authenticated, false if authentication runs but fails, Promise rejected on authentication process errors
  */
-export const authenticate = async (user: string, plaintext: string): Promise<boolean> => {
-  const shadow = async (): Promise<boolean> => {
+export const authenticate = async (user: string, plaintext: string): Promise<string> => {
+  const shadow = async (): Promise<string> => {
     // Return true for auth success, false for auth failure, reject on error
 
     await fs.promises.stat('/etc/shadow');
@@ -29,12 +33,16 @@ export const authenticate = async (user: string, plaintext: string): Promise<boo
         if (shadowInfo && shadowInfo.password === '!') {
           reject('invalid password in /etc/shadow');
         } else if (shadowInfo) {
-          const pwParts = shadowInfo['password'].split(/\$/);
+          const pwParts = shadowInfo.password.split(/\$/);
           const salt = pwParts[2];
           const pwHash = hash.sha512crypt(plaintext, salt);
 
-          const passed = pwHash === shadowInfo['password'];
-          resolve(passed);
+          const passed = pwHash === shadowInfo.password;
+          if (passed) {
+            resolve(user);
+          } else {
+            reject('password does not match /etc/shadow')
+          }
         } else {
           reject('no information returned from /etc/shadow');
         }
@@ -42,42 +50,47 @@ export const authenticate = async (user: string, plaintext: string): Promise<boo
     });
   };
 
-  const posix = async (): Promise<boolean> => {
+  const posix = async (): Promise<string> => {
     // Return true for auth success, false for auth failure, reject on error
     return await new Promise((resolve, reject) => {
       try {
         const userData = nodePosix.getpwnam(user);
+        if (!userData) {
+          reject('no information from getpwnam')
+        }
 
         // Attempt to use crypt first
         if (crypt(plaintext, userData.passwd) === userData.passwd) {
-          resolve(true);
+          resolve(user);
+          return;
         }
 
         // Crypt hash fails on FreeNAS so try sha512
-        else if (userData) {
-          const password_parts = userData.passwd.split(/\$/);
-          const salt = password_parts[2];
-          const new_hash = hash.sha512crypt(plaintext, salt);
+        const passwordParts = userData.passwd.split(/\$/);
+        const salt = passwordParts[2] || '';
+        const newHash = hash.sha512crypt(plaintext, salt);
 
-          const passed = new_hash === userData.passwd;
-          resolve(passed);
+        const passed = newHash === userData.passwd;
+        if (passed) {
+          resolve(user);
         } else {
-          reject('no information from getpwnam');
+          reject('invalid posix password')
         }
+
       } catch (e) {
         reject(e);
       }
     });
   };
 
-  const pam = async (): Promise<boolean> => {
+  const pam = async (): Promise<string> => {
     // Return true for auth success, false for auth failure, reject on error
     return await new Promise((resolve, reject) => {
       authenticatePam.authenticate(user, plaintext, (err) => {
         if (err) {
           reject(err);
         }
-        resolve(true);
+        resolve(user);
       });
     });
   };
@@ -102,19 +115,20 @@ export const authenticate = async (user: string, plaintext: string): Promise<boo
  */
 export const testMembership = async (username: string, group: string): Promise<boolean> => {
   return await new Promise((resolve) => {
-    let isMember = false;
     passwd
       .getGroups()
       .on('group', (groupData) => {
-        if (group == groupData.groupname)
+        if (group === groupData.groupname)
           try {
-            if (groupData.users.indexOf(username) >= 0 || groupData.gid == userid.gids(username)[0]) isMember = true;
+            if (groupData.users.indexOf(username) >= 0 || groupData.gid === userid.gids(username)[0]) {
+              resolve(true);
+            }
           } catch (e) {
-            console.error(e);
+            logger.error('error checking group membership', e);
           }
       })
       .on('end', () => {
-        resolve(isMember);
+        resolve(false);
       });
   });
 };
@@ -126,7 +140,7 @@ export const testMembership = async (username: string, group: string): Promise<b
  * @param gid GID to check
  * @returns [uidExists: boolean, gidExists: boolean] Tuple indicating if the UID, GID, or both exist
  */
-export const existsOnSystem = async (uid, gid): Promise<boolean[]> => {
+export const existsOnSystem = async (uid: number, gid:number ): Promise<boolean[]> => {
   return await Promise.all([
     new Promise<boolean>((resolve) => {
       passwd
@@ -143,8 +157,8 @@ export const existsOnSystem = async (uid, gid): Promise<boolean[]> => {
     new Promise<boolean>((resolve) => {
       passwd
         .getGroups()
-        .on('group', (group_data) => {
-          if (group_data.gid === gid) {
+        .on('group', (groupData) => {
+          if (groupData.gid === gid) {
             resolve(true);
           }
         })

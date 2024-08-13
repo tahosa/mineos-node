@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:stream';
 
 import { Logger } from './logger';
 
-const logger = Logger('util');
+const logger = Logger.child({ service: 'util' });
 
 export const readIni = (filepath: string, clearOnError = false): { [key: string]: any } | undefined => {
   try {

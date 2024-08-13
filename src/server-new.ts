@@ -9,7 +9,7 @@ import { DIRS } from './constants';
 import { Logger } from './lib/logger';
 import child from 'node:child_process';
 
-const logger = Logger('server');
+const logger = Logger.child({ service: 'server' });
 
 export default class Server {
   baseDir: string;

@@ -23,7 +23,7 @@ import { bufferToAscii, type MinecraftFullStats, readIni, splitBuffer, swapBytes
 import { existsOnSystem } from './auth-new';
 import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants';
 
-const logger = Logger('instance');
+const logger = Logger.child({ service: 'instance' });
 
 const proc_paths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
 let PROC_PATH: string;
