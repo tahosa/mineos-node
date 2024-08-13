@@ -25,14 +25,14 @@ import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS
 
 const logger = Logger.child({ service: 'instance' });
 
-const proc_paths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
+const procPaths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
 let PROC_PATH: string;
 
-for (const proc in proc_paths) {
+for (const proc in procPaths) {
   logger.debug(`checking ${proc} for process stats`);
   try {
-    fs.statSync(path.join(proc_paths[proc], 'uptime'));
-    PROC_PATH = proc_paths[proc];
+    fs.statSync(path.join(procPaths[proc], 'uptime'));
+    PROC_PATH = procPaths[proc];
     procfs['PROC'] = PROC_PATH; //procfs will default to /proc but we want to set it more variably
     break;
   } catch (e) {
@@ -134,14 +134,14 @@ export class Instance {
       }
 
       // Check if it is runninng SCREEN
-      const screen_match = SCREEN_REGEX.exec(cmdline);
-      if (screen_match) {
-        if (screen_match[1] in instances) {
+      const screenMatch = SCREEN_REGEX.exec(cmdline);
+      if (screenMatch) {
+        if (screenMatch[1] in instances) {
           // Instance already exists, update PID
-          instances[screen_match[1]]['screen'] = parseInt(pids[i]);
+          instances[screenMatch[1]]['screen'] = parseInt(pids[i]);
         } else {
           // Add entry for instance
-          instances[screen_match[1]] = { screen: parseInt(pids[i]) };
+          instances[screenMatch[1]] = { screen: parseInt(pids[i]) };
         }
       } else {
         let environ: string;
@@ -159,14 +159,14 @@ export class Instance {
           continue;
         }
 
-        const java_match = JAVA_REGEX.exec(environ);
-        if (java_match) {
-          if (java_match[1] in instances) {
+        const javaMatch = JAVA_REGEX.exec(environ);
+        if (javaMatch) {
+          if (javaMatch[1] in instances) {
             // Instance already exists, update PID
-            instances[java_match[1]]['java'] = parseInt(pids[i]);
+            instances[javaMatch[1]]['java'] = parseInt(pids[i]);
           } else {
             // Add entry for instance
-            instances[java_match[1]] = { java: parseInt(pids[i]) };
+            instances[javaMatch[1]] = { java: parseInt(pids[i]) };
           }
         }
       }
@@ -395,26 +395,26 @@ export class Instance {
         socket.on('data', (data) => {
           socket.end();
 
-          const legacy_split = splitBuffer(data, 0x00a7);
-          const modern_split = swapBytes(data.subarray(3)).toString('ucs2').split('\u0000').splice(1);
+          const legacySplit = splitBuffer(data, 0x00a7);
+          const modernSplit = swapBytes(data.subarray(3)).toString('ucs2').split('\u0000').splice(1);
 
-          if (modern_split.length == 5) {
+          if (modernSplit.length == 5) {
             // modern ping to modern server
             resolve({
-              protocol: parseInt(modern_split[0]),
-              serverVersion: modern_split[1],
-              motd: modern_split[2],
-              playersOnline: parseInt(modern_split[3]),
-              playersMax: parseInt(modern_split[4]),
+              protocol: parseInt(modernSplit[0]),
+              serverVersion: modernSplit[1],
+              motd: modernSplit[2],
+              playersOnline: parseInt(modernSplit[3]),
+              playersMax: parseInt(modernSplit[4]),
             });
-          } else if (legacy_split.length == 3) {
-            if (String.fromCharCode(legacy_split[0][-1]) == '\u0000') {
+          } else if (legacySplit.length == 3) {
+            if (String.fromCharCode(legacySplit[0][-1]) == '\u0000') {
               // modern ping to legacy server
               resolve({
                 serverVersion: '',
-                motd: bufferToAscii(legacy_split[0].subarray(3, legacy_split[0].length - 1)),
-                playersOnline: parseInt(bufferToAscii(legacy_split[1])),
-                playersMax: parseInt(bufferToAscii(legacy_split[2])),
+                motd: bufferToAscii(legacySplit[0].subarray(3, legacySplit[0].length - 1)),
+                playersOnline: parseInt(bufferToAscii(legacySplit[1])),
+                playersMax: parseInt(bufferToAscii(legacySplit[2])),
               });
             }
           }
@@ -1104,15 +1104,15 @@ export class Instance {
    */
   async previousVersion(filename: string, increment: number): Promise<string> {
     const binary = which.sync('rdiff-backup');
-    const abs_filepath = path.join(this.env.bwd, filename);
+    const absFilepath = path.join(this.env.bwd, filename);
 
     return await new Promise((resolve, reject) => {
-      tmp.file((err, new_file_path) => {
+      tmp.file((err, newFilepath) => {
         if (err) {
           reject(err);
         }
 
-        const args = ['--force', '--restore-as-of', `${increment}`, abs_filepath, new_file_path];
+        const args = ['--force', '--restore-as-of', `${increment}`, absFilepath, newFilepath];
         const params = { cwd: this.env.bwd };
         const proc = child.spawn(binary, args, params);
 
@@ -1122,7 +1122,7 @@ export class Instance {
 
         proc.on('exit', (code) => {
           if (code == 0) {
-            fs.readFile(new_file_path, (inErr, data) => {
+            fs.readFile(newFilepath, (inErr, data) => {
               if (inErr) {
                 reject(inErr);
                 return;
@@ -1271,13 +1271,13 @@ export class Instance {
    */
   async listArchives(): Promise<ArchiveListItem[]> {
     const awd = this.env['awd'];
-    const all_info: ArchiveListItem[] = [];
+    const archiveFiles: ArchiveListItem[] = [];
 
     const files = await fs.promises.readdir(awd);
     await Promise.all(
       files.map(async (file) => {
         const statInfo = await fs.promises.stat(path.join(awd, file));
-        all_info.push({
+        archiveFiles.push({
           time: statInfo.mtime,
           size: statInfo.size,
           filename: file,
@@ -1285,7 +1285,7 @@ export class Instance {
       })
     );
 
-    return all_info.sort((a, b) => b.time.getTime() - a.time.getTime());
+    return archiveFiles.sort((a, b) => b.time.getTime() - a.time.getTime());
   }
 
   /**
@@ -1326,10 +1326,10 @@ export class Instance {
    * @param filename Archive file to delete
    */
   async deleteArchive(filename: string): Promise<void> {
-    const archive_path = path.join(this.env['awd'], filename);
+    const archiveFiles = path.join(this.env['awd'], filename);
 
     return await new Promise((resolve, reject) => {
-      fs.remove(archive_path, (err) => {
+      fs.remove(archiveFiles, (err) => {
         if (err) {
           reject(err);
         }
@@ -1618,24 +1618,24 @@ export class Instance {
    */
   async getAutosaveState(): Promise<boolean> {
     return await new Promise((res) => {
-      const new_tail = new Tail(path.join(this.env.cwd, 'logs/latest.log'));
+      const newTail = new Tail(path.join(this.env.cwd, 'logs/latest.log'));
 
       const timeout = setTimeout(() => {
-        new_tail.unwatch();
+        newTail.unwatch();
         res(true); //default to true for unsupported server functionality fallback
       }, 2 * 1000); // TODO magic number?
 
-      new_tail.on('line', async (data) => {
+      newTail.on('line', async (data) => {
         if (data.match(/INFO]: Saving is already turned on/)) {
           //previously on, return true
           clearTimeout(timeout);
-          new_tail.unwatch();
+          newTail.unwatch();
           res(true);
         }
         if (data.match(/INFO]: Turned on world auto-saving/)) {
           //previously off, return false
           clearTimeout(timeout);
-          new_tail.unwatch();
+          newTail.unwatch();
 
           this.stuff('save-off');
           res(false); //return initial state
