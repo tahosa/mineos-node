@@ -19,7 +19,8 @@
   "homepage": "https://github.com/hexparrot/mineos-node",
   "scripts": {
     "start": "node webui.js",
-    "test": "npx jest"
+    "test": "npx jest",
+    "test:coverage": "npx jest --coverage"
   },
   "dependencies": {
     "adm-zip": "^0.4.11",

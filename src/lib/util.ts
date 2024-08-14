@@ -6,6 +6,13 @@ import { Logger } from './logger';
 
 const logger = Logger.child({ service: 'util' });
 
+/**
+ * Read an INI formatted file
+ *
+ * @param filepath File to read
+ * @param clearOnError If there is an error, set the file to an empty contents
+ * @returns Contents of the INI file as a JSON object
+ */
 export const readIni = (filepath: string, clearOnError = false): { [key: string]: any } | undefined => {
   try {
     const data = fs.readFileSync(filepath);

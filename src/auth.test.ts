@@ -58,7 +58,7 @@ describe('auth', () => {
       let mockPosix;
 
       beforeAll(() => {
-        jest.spyOn(fs.promises, 'stat').mockReturnValue(new Promise<fs.Stats>((resolve) => { resolve({} as fs.Stats) }));
+        jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({} as fs.Stats));
         mockPam = jest.spyOn(authenticatePam, 'authenticate');
         mockShadow = jest.spyOn(passwd, 'getShadow');
         mockPosix = jest.spyOn(nodePosix, 'getpwnam')

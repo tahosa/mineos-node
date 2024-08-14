@@ -1,12 +1,11 @@
 import child from 'child_process';
 import chownr from 'chownr';
-import DecompressZip from 'decompress-zip';
 import du from 'du';
 import fs from 'fs-extra';
 import ini from 'ini';
 import mcquery from 'mcquery';
-import net from 'net';
 import { constants } from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import procfs from 'procfs-stats';
 import rsync from 'rsync2';
@@ -211,7 +210,7 @@ export class Instance {
    * @returns Contents of server.properties file for this instance
    */
   sp(): ServerProperties {
-    return this.readIni(this.env.sp) as ServerProperties;
+    return (this.readIni(this.env.sp) || {}) as ServerProperties;
   }
 
   /**
@@ -252,7 +251,7 @@ export class Instance {
    * @returns Contents of server.config file for this instance
    */
   sc(): ServerConfig {
-    return this.readIni(this.env.sc) as ServerConfig;
+    return (this.readIni(this.env.sc) || {}) as ServerConfig;
   }
 
   /**
@@ -283,7 +282,7 @@ export class Instance {
    * @returns List of cron configurations for this instance
    */
   crons(): CronConfig {
-    return this.readIni(this.env.cc) as CronConfig;
+    return (this.readIni(this.env.cc) || {}) as CronConfig;
   }
 
   /**
@@ -338,132 +337,6 @@ export class Instance {
   }
 
   /**
-   * Send a query packet to the Minecraft server to get the current stats.
-   *
-   * @returns Current Minecraft stats
-   */
-  async ping(): Promise<QueryResponse> {
-    const port = Number(this.sp()['server-port']);
-    if (!port) {
-      return Promise.reject('no server port set for this instance');
-    }
-
-    const jarfile = this.sc().java?.jarfile;
-    if (jarfile && jarfile.slice(-5).toLowerCase() === '.phar') {
-      return Promise.reject('cannot ping instances using .phar executables');
-    } else {
-      const pids = Instance.listRunningInstancePids();
-      if (!(this.name in pids)) {
-        return Promise.reject('instance not running');
-      }
-    }
-
-    /**
-     * Send a Minecraft query packet to the given port and wait for a response
-     *
-     * @param port Port number
-     */
-    const sendQueryPacket = async (port: number): Promise<QueryResponse> => {
-      return await new Promise((resolve, reject) => {
-        const socket = new net.Socket();
-        const query = 'modern';
-        const QUERIES = {
-          modern: '\xfe\x01',
-          legacy:
-            '\xfe' +
-            '\x01' +
-            '\xfa' +
-            '\x00\x06' +
-            '\x00\x6d\x00\x69\x00\x6e\x00\x65\x00\x6f\x00\x73' +
-            '\x00\x19' +
-            '\x49' +
-            '\x00\x09' +
-            '\x00\x6c\x00\x6f\x00\x63\x00\x61\x00\x6c\x00\x68' +
-            '\x00\x6f\x00\x73\x00\x74' +
-            '\x00\x00\x63\xdd',
-        };
-
-        socket.setTimeout(2500);
-
-        socket.on('connect', () => {
-          const buf = Buffer.alloc(2);
-
-          buf.write(QUERIES[query], 0, QUERIES[query].length, 'binary');
-          socket.write(buf);
-        });
-
-        socket.on('data', (data) => {
-          socket.end();
-
-          const legacySplit = splitBuffer(data, 0x00a7);
-          const modernSplit = swapBytes(data.subarray(3)).toString('ucs2').split('\u0000').splice(1);
-
-          if (modernSplit.length == 5) {
-            // modern ping to modern server
-            resolve({
-              protocol: parseInt(modernSplit[0]),
-              serverVersion: modernSplit[1],
-              motd: modernSplit[2],
-              playersOnline: parseInt(modernSplit[3]),
-              playersMax: parseInt(modernSplit[4]),
-            });
-          } else if (legacySplit.length == 3) {
-            if (String.fromCharCode(legacySplit[0][-1]) == '\u0000') {
-              // modern ping to legacy server
-              resolve({
-                serverVersion: '',
-                motd: bufferToAscii(legacySplit[0].subarray(3, legacySplit[0].length - 1)),
-                playersOnline: parseInt(bufferToAscii(legacySplit[1])),
-                playersMax: parseInt(bufferToAscii(legacySplit[2])),
-              });
-            }
-          }
-        });
-
-        socket.on('error', (err) => {
-          logger.error(`ping: MC Server not available on port ${port}`);
-          //logger.debug(err);
-          //logger.debug(err.stack);
-          reject(err);
-        });
-
-        socket.connect({ port: port });
-      });
-    };
-
-    return await sendQueryPacket(port);
-  }
-
-  /**
-   * Query the Minecraft process for the full stats information
-   *
-   * @returns The fully query stats from the Minecraft server: https://wiki.vg/Query#Full_stat
-   */
-  async query(): Promise<MinecraftFullStats> {
-    const jarfile = this.sc().java?.jarfile;
-    if (!jarfile) {
-      return Promise.reject('jarfile not set');
-    } else if (jarfile.slice(-5).toLocaleLowerCase() == '.phar') {
-      return Promise.reject('cannot query instances using .phar executables');
-    }
-
-    const port = this.sp()['server-port'];
-
-    const query = new mcquery('localhost', port);
-    await query.connect();
-
-    return await new Promise((resolve, reject) => {
-      query.full_stat((err, stat) => {
-        if (err) {
-          reject(err);
-        }
-
-        resolve(stat);
-      });
-    });
-  }
-
-  /**
    * Create the necessary folders and files for this instance if they don't already exist
    *
    * @param owner Owner information to use when creating files and folders
@@ -501,114 +374,40 @@ export class Instance {
   }
 
   /**
-   * Create the necessary folders and files for this instance from an archive
+   * Create the necessary folders and files for this instance from a tar archive
    *
    * @param owner Owner information to use when creating files and folders
    * @param filepath Archive path to copy from
    */
   async createFromArchive(owner: { uid: number; gid: number }, filepath: string): Promise<void | void[]> {
-    /**
-     *
-     * @param sourceDir Source directory with
-     * @returns
-     */
-    const moveToParentDir = async (sourceDir: string) => {
-      let remainder = '';
+    let sourceFilepath: string = '';
 
-      const parentFiles = await fs.promises.readdir(sourceDir);
-      if (parentFiles.length === 1) {
-        remainder = parentFiles[0];
-      } else if (parentFiles.length === 4) {
-        const spIdx = parentFiles.indexOf('server.properties');
-        const scIdx = parentFiles.indexOf('server.config');
-        const ccIdx = parentFiles.indexOf('cron.config');
+    if (filepath.startsWith(path.sep)) {
+      // if it starts with a '/', treat it as an absolute path
+      sourceFilepath = filepath;
+    } else {
+      // if it doesn't treat it as being from baseDir/import/
+      sourceFilepath = path.join(this.env.baseDir, DIRS['import'], filepath);
+    }
 
-        // Remove default files from the list
-        if (spIdx >= 0) {
-          parentFiles.splice(spIdx, 1);
-        }
-        if (scIdx >= 0) {
-          parentFiles.splice(scIdx, 1);
-        }
-        if (ccIdx >= 0) {
-          parentFiles.splice(ccIdx, 1);
-        }
-
-        remainder = parentFiles[0];
-      } else {
-        return Promise.reject(`${sourceDir} is not a valid parent directory`);
-      }
-
-      const oldDir = path.join(sourceDir, remainder);
-      if (!(await fs.promises.lstat(oldDir)).isDirectory()) {
-        return Promise.reject(`inner path ${oldDir} is not a directory`);
-      }
-
-      const innerFiles = await fs.promises.readdir(oldDir);
-      return await Promise.all(
-        innerFiles.map((file) => {
-          const oldPath = path.join(oldDir, file);
-          const newPath = path.join(sourceDir, file);
-          return new Promise<void>((resolve, reject) => {
-            fs.move(oldPath, newPath, { overwrite: true }, (err) => {
-              if (err) {
-                reject(err);
-              }
-
-              resolve();
-            });
-          });
-        })
-      );
-    };
-
-    let destFilepath: string = '';
-
-    if (filepath.match(/\//))
-      //if it has a '/', its hopefully an absolute path
-      destFilepath = filepath;
-    // if it doesn't treat it as being from /import/
-    else destFilepath = path.join(this.env.baseDir, DIRS['import'], filepath);
-
-    const split = destFilepath.split('.');
+    const split = sourceFilepath.split('.');
     let extension = split.pop();
 
-    if (extension == 'gz') if (split.pop() == 'tar') extension = 'tar.gz';
+    if (extension === 'gz' && split.pop() === 'tar') {
+      extension = 'tar.gz';
+    }
 
     switch (extension) {
-      case 'zip':
-        const unzipper = async (filepath: string) => {
-          return await new Promise((resolve, reject) => {
-            const unzipper = new DecompressZip(filepath);
-
-            unzipper.on('error', (err) => {
-              reject(err);
-            });
-
-            unzipper.on('extract', () => {
-              resolve(moveToParentDir(this.env.cwd));
-            });
-
-            unzipper.extract({
-              path: this.env.cwd,
-            });
-          });
-        };
-
-        await this.create(owner);
-        await unzipper(destFilepath);
-        return await this.chown(owner.uid, owner.gid);
-
       case 'tar.gz':
       case 'tgz':
       case 'tar':
         const binary = which.sync('tar');
-        const args = ['-xf', destFilepath];
+        const args = ['-xf', sourceFilepath];
         const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
 
         await this.create(owner);
-        const proc = child.spawn(binary, args, params);
-        return await new Promise((resolve, reject) => {
+        return new Promise((resolve, reject) => {
+          const proc = child.spawn(binary, args, params);
           proc.once('exit', (code) => {
             if (code) {
               reject(code);
@@ -617,8 +416,10 @@ export class Instance {
             resolve();
           });
         });
+      }
+
+      return Promise.reject(`cannot create instance ${this.name} from archive with unsupported file type ${extension}`);
     }
-  }
 
   /**
    * Delete the files for this instance
@@ -634,104 +435,6 @@ export class Instance {
       fs.promises.rm(this.env.bwd, rmOptions),
       fs.promises.rm(this.env.awd, rmOptions),
     ]);
-  }
-
-  /**
-   * Get the startup arguments for this instance
-   *
-   * @returns Arguments to pass to screen to start the server
-   */
-  getStartArgs(): string[] {
-    const jar = (unconventional: boolean = false): string[] => {
-      const systemJava = which.sync('java');
-      const javaConfig = this.sc().java;
-      const javaArgs = {
-        binary: javaConfig?.java_binary || systemJava,
-        xmx: parseInt(javaConfig?.java_xmx) || 0,
-        xms: parseInt(javaConfig?.java_xms) || 0,
-        jarfile: javaConfig?.jarfile,
-        jar_args: javaConfig?.jar_args || '',
-        java_tweaks: javaConfig?.java_tweaks || null,
-      };
-
-      if (!javaArgs.binary) {
-        throw new Error('no java binary assigned for instance');
-      }
-
-      if (javaArgs.xmx <= 0) {
-        throw new Error('Xmx heapsize must be positive integer >= 0');
-      }
-
-      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
-        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
-      }
-
-      if (!javaArgs.jarfile) {
-        throw new Error('instance not assigned a runnable jar');
-      }
-
-      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
-
-      if (javaArgs.xmx) {
-        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
-      }
-      if (javaArgs.xms) {
-        screenArgs.push(`-Xms${javaArgs.xms}M`);
-      }
-
-      if (javaArgs.java_tweaks) {
-        screenArgs.push(...javaArgs.java_tweaks.split(' '));
-      }
-
-      screenArgs.push('-jar', javaArgs.jarfile);
-
-      screenArgs.push(...javaArgs.jar_args.split(' '));
-
-      if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
-        screenArgs.push('--installServer');
-      }
-
-      return screenArgs;
-    };
-
-    const phar = (): string[] => {
-      let binary: string;
-
-      try {
-        const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
-        fs.accessSync(php7, constants.F_OK);
-        binary = './bin/php7/bin/php';
-      } catch (e) {
-        binary = './bin/php5/bin/php';
-      }
-
-      const pharFile = this.sc().java?.jarfile;
-      if (!pharFile) {
-        throw new Error('instance not assigned a runnable phar');
-      }
-
-      return ['-dmS', `mc-${this.name}`, binary, pharFile];
-    };
-
-    const cuberite = (): string[] => {
-      return ['-dmS', `mc-${this.name}`, './Cuberite'];
-    };
-
-    const sc = this.sc();
-    const jarfile = sc.java?.jarfile;
-    const unconventional = sc.minecraft?.unconventional;
-
-    if (!jarfile) {
-      throw new Error('Cannot start instance without a designated jar/phar');
-    } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
-      return jar(unconventional);
-    } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
-      return phar();
-    } else if (jarfile === 'Cuberite') {
-      return cuberite();
-    }
-
-    throw new Error(`unknown jar type ${jarfile}`);
   }
 
   /**
@@ -819,6 +522,137 @@ export class Instance {
   }
 
   /**
+   * Send a query packet to the Minecraft server to get the current stats.
+   *
+   * @returns Current Minecraft stats
+   */
+  async ping(): Promise<QueryResponse> {
+    const port = Number(this.sp()['server-port']);
+    if (!port) {
+      return Promise.reject('no server port set for this instance');
+    }
+
+    const jarfile = this.sc().java?.jarfile;
+    if (jarfile && jarfile.slice(-5).toLowerCase() === '.phar') {
+      return Promise.reject('cannot ping instances using .phar executables');
+    } else {
+      const pids = Instance.listRunningInstancePids();
+      if (!(this.name in pids)) {
+        return Promise.reject('instance not running');
+      }
+    }
+
+    /**
+     * Send a Minecraft query packet to the given port and wait for a response
+     *
+     * @param port Port number
+     */
+    const sendQueryPacket = async (port: number): Promise<QueryResponse> => {
+      return await new Promise((resolve, reject) => {
+        const socket = new net.Socket();
+        const query = '\xfe\x01';
+
+        socket.setTimeout(2500);
+
+        socket.on('connect', () => {
+          const buf = Buffer.alloc(2);
+
+          buf.write(query, 0, query.length, 'binary');
+          socket.write(buf);
+        });
+
+        socket.on('data', (data) => {
+          socket.end();
+
+          const legacySplit = splitBuffer(data, 0x00a7);
+          const modernSplit = swapBytes(data.subarray(3)).toString('ucs2').split('\x00').splice(1);
+
+          if (modernSplit.length == 5) {
+            // modern ping to modern server
+            resolve({
+              protocol: parseInt(modernSplit[0]),
+              serverVersion: modernSplit[1],
+              motd: modernSplit[2],
+              playersOnline: parseInt(modernSplit[3]),
+              playersMax: parseInt(modernSplit[4]),
+            });
+          } else if (legacySplit.length == 3) {
+            if (String.fromCharCode(legacySplit[0][-1]) == '\u0000') {
+              // modern ping to legacy server
+              resolve({
+                serverVersion: '',
+                motd: bufferToAscii(legacySplit[0].subarray(3, legacySplit[0].length - 1)),
+                playersOnline: parseInt(bufferToAscii(legacySplit[1])),
+                playersMax: parseInt(bufferToAscii(legacySplit[2])),
+              });
+            }
+          }
+        });
+
+        socket.on('error', (err) => {
+          logger.error(`ping: MC Server ${this.name} not available on port ${port}`);
+          //logger.debug('error', err);}
+          reject(err);
+        });
+
+        socket.connect({ port: port });
+      });
+    };
+
+    return await sendQueryPacket(port);
+  }
+
+  /**
+   * Query the Minecraft process for the full stats information
+   *
+   * @returns The fully query stats from the Minecraft server: https://wiki.vg/Query#Full_stat
+   */
+  async query(): Promise<MinecraftFullStats> {
+    const jarfile = this.sc().java?.jarfile;
+    if (!jarfile) {
+      return Promise.reject('jarfile not set');
+    } else if (jarfile.slice(-5).toLocaleLowerCase() == '.phar') {
+      return Promise.reject('cannot query instances using .phar executables');
+    }
+
+    const port = this.sp()['server-port'];
+
+    const query = new mcquery('localhost', port);
+    await query.connect();
+
+    return await new Promise((resolve, reject) => {
+      query.full_stat((err, stat) => {
+        if (err) {
+          reject(err);
+        }
+
+        resolve(stat);
+      });
+    });
+  }
+
+  /**
+   * Send a command to the Minecraft process
+   *
+   * @param command Command to send
+   */
+  async stuff(command: string): Promise<string> {
+    const params = {
+      cwd: this.env.cwd,
+      ...(await this.getOwner()),
+    };
+    const binary = which.sync('screen');
+
+    if (!(await this.exists()) && (await this.isUp())) {
+      throw new Error(`instance ${this.name} does not exist or is not running`);
+    }
+
+    return child
+      .execFileSync(binary, ['-S', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params)
+      .toString('utf-8');
+  }
+
+  /**
    * Start the instance
    */
   async start(): Promise<void> {
@@ -873,8 +707,8 @@ export class Instance {
 
     await this.stuff('stop');
     while (iterations < MAX_ITERATIONS_TO_QUIT) {
-      const running = await new Promise((res) => {
-        setTimeout(() => res(this.name in Instance.listRunningInstancePids()), interval);
+      const running = await new Promise((resolve) => {
+        setTimeout(() => resolve(this.name in Instance.listRunningInstancePids()), interval);
       });
 
       if (!running) {
@@ -924,8 +758,8 @@ export class Instance {
       let iterations = 0;
 
       while (iterations < MAX_ITERATIONS_TO_QUIT) {
-        const running = await new Promise((res) => {
-          setTimeout(() => res(this.name in Instance.listRunningInstancePids()), interval);
+        const running = await new Promise((resolve) => {
+          setTimeout(() => resolve(this.name in Instance.listRunningInstancePids()), interval);
         });
 
         if (!running) {
@@ -941,27 +775,6 @@ export class Instance {
   }
 
   /**
-   * Send a command to the Minecraft process
-   *
-   * @param command Command to send
-   */
-  async stuff(command: string): Promise<string> {
-    const params = {
-      cwd: this.env.cwd,
-      ...(await this.getOwner()),
-    };
-    const binary = which.sync('screen');
-
-    if (!(await this.exists()) && (await this.isUp())) {
-      throw new Error(`instance ${this.name} does not exist or is not running`);
-    }
-
-    return child
-      .execFileSync(binary, ['-S', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params)
-      .toString('utf-8');
-  }
-
-  /**
    * Send a save command to the Minecraft process
    *
    * @param delay Seconds to wait
@@ -973,8 +786,8 @@ export class Instance {
       return Promise.reject(`instance ${this.name} does not exist or is not running`);
     }
     await this.stuff('save-all');
-    return await new Promise<void>((res) => {
-      setTimeout(() => res(), (delay || FALLBACK_DELAY_SECONDS) * 1000);
+    return await new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), (delay || FALLBACK_DELAY_SECONDS) * 1000);
     });
   }
 
@@ -1352,6 +1165,104 @@ export class Instance {
     }));
   }
 
+    /**
+   * Get the startup arguments for this instance
+   *
+   * @returns Arguments to pass to screen to start the server
+   */
+    getStartArgs(): string[] {
+      const jar = (unconventional: boolean = false): string[] => {
+        const systemJava = which.sync('java');
+        const javaConfig = this.sc().java;
+        const javaArgs = {
+          binary: javaConfig?.java_binary || systemJava,
+          xmx: parseInt(javaConfig?.java_xmx) || 0,
+          xms: parseInt(javaConfig?.java_xms) || 0,
+          jarfile: javaConfig?.jarfile,
+          jar_args: javaConfig?.jar_args || '',
+          java_tweaks: javaConfig?.java_tweaks || null,
+        };
+
+        if (!javaArgs.binary) {
+          throw new Error('no java binary assigned for instance');
+        }
+
+        if (javaArgs.xmx <= 0) {
+          throw new Error('Xmx heapsize must be positive integer >= 0');
+        }
+
+        if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
+          throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
+        }
+
+        if (!javaArgs.jarfile) {
+          throw new Error('instance not assigned a runnable jar');
+        }
+
+        const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
+
+        if (javaArgs.xmx) {
+          screenArgs.push(`-Xmx${javaArgs.xmx}M`);
+        }
+        if (javaArgs.xms) {
+          screenArgs.push(`-Xms${javaArgs.xms}M`);
+        }
+
+        if (javaArgs.java_tweaks) {
+          screenArgs.push(...javaArgs.java_tweaks.split(' '));
+        }
+
+        screenArgs.push('-jar', javaArgs.jarfile);
+
+        screenArgs.push(...javaArgs.jar_args.split(' '));
+
+        if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
+          screenArgs.push('--installServer');
+        }
+
+        return screenArgs;
+      };
+
+      const phar = (): string[] => {
+        let binary: string;
+
+        try {
+          const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
+          fs.accessSync(php7, constants.F_OK);
+          binary = './bin/php7/bin/php';
+        } catch (e) {
+          binary = './bin/php5/bin/php';
+        }
+
+        const pharFile = this.sc().java?.jarfile;
+        if (!pharFile) {
+          throw new Error('instance not assigned a runnable phar');
+        }
+
+        return ['-dmS', `mc-${this.name}`, binary, pharFile];
+      };
+
+      const cuberite = (): string[] => {
+        return ['-dmS', `mc-${this.name}`, './Cuberite'];
+      };
+
+      const sc = this.sc();
+      const jarfile = sc.java?.jarfile;
+      const unconventional = sc.minecraft?.unconventional;
+
+      if (!jarfile) {
+        throw new Error('Cannot start instance without a designated jar/phar');
+      } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
+        return jar(unconventional);
+      } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
+        return phar();
+      } else if (jarfile === 'Cuberite') {
+        return cuberite();
+      }
+
+      throw new Error(`unknown jar type ${jarfile}`);
+    }
+
   /**
    *
    * @param uid
@@ -1463,7 +1374,7 @@ export class Instance {
    * @returns True if server.properties exists, false otherwise
    */
   async exists(): Promise<boolean> {
-    return await fs.promises.stat(this.env.sp).then((statData) => !!statData);
+    return await fs.promises.stat(this.env.sp).then((statData) => !!statData).catch(() => false);
   }
 
   /**
@@ -1617,12 +1528,12 @@ export class Instance {
    * @returns True if autosave is enabled or not supported by this instance, false otherwise
    */
   async getAutosaveState(): Promise<boolean> {
-    return await new Promise((res) => {
+    return await new Promise((resolve) => {
       const newTail = new Tail(path.join(this.env.cwd, 'logs/latest.log'));
 
       const timeout = setTimeout(() => {
         newTail.unwatch();
-        res(true); //default to true for unsupported server functionality fallback
+        resolve(true); //default to true for unsupported server functionality fallback
       }, 2 * 1000); // TODO magic number?
 
       newTail.on('line', async (data) => {
@@ -1630,7 +1541,7 @@ export class Instance {
           //previously on, return true
           clearTimeout(timeout);
           newTail.unwatch();
-          res(true);
+          resolve(true);
         }
         if (data.match(/INFO]: Turned on world auto-saving/)) {
           //previously off, return false
@@ -1638,7 +1549,7 @@ export class Instance {
           newTail.unwatch();
 
           this.stuff('save-off');
-          res(false); //return initial state
+          resolve(false); //return initial state
         }
       });
 

@@ -1,14 +1,34 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import fs from 'fs-extra';
+import child from 'child_process';
+import fsExtra from 'fs-extra';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import ini from 'ini';
+import which from 'which';
 
 import { CronTask } from './constants';
-import { Instance } from './instance';
+import './lib/logger';
 import { readIni } from './lib/util';
 
 jest.mock('./lib/util', () => ({
   readIni: jest.fn(),
 }));
+
+const mockLogger = {
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  log: jest.fn(),
+}
+
+jest.mock('./lib/logger', () => ({
+  Logger: {
+    child: () => mockLogger
+  }
+}));
+
+import { Instance } from './instance';
 
 describe('Instance', () => {
   describe('static', () => {
@@ -21,10 +41,10 @@ describe('Instance', () => {
     });
 
     test('should read from server path', () => {
-      jest.spyOn(fs, 'readdirSync').mockReturnValue([]);
+      jest.spyOn(fsExtra, 'readdirSync').mockReturnValue([]);
 
       Instance.listInstances('/path');
-      expect(fs.readdirSync).toHaveBeenCalledWith('/path/servers');
+      expect(fsExtra.readdirSync).toHaveBeenCalledWith('/path/servers');
     });
 
     test('should validate instance names', () => {
@@ -72,10 +92,10 @@ describe('Instance', () => {
         unrelated: {},
       };
 
-      (jest.spyOn(fs, 'readdirSync') as unknown as jest.MockedFunction<(path: string) => string[]>).mockReturnValue(
+      (jest.spyOn(fsExtra, 'readdirSync') as unknown as jest.MockedFunction<(path: string) => string[]>).mockReturnValue(
         Object.keys(mockProcesses)
       );
-      (jest.spyOn(fs, 'readFileSync') as unknown as jest.MockedFunction<(path: string) => Buffer>).mockImplementation(
+      (jest.spyOn(fsExtra, 'readFileSync') as unknown as jest.MockedFunction<(path: string) => Buffer>).mockImplementation(
         (path: string) => {
           const procMatch = path.match(/(\d+)\/(cmdline|environ)$/);
           if (!procMatch) {
@@ -136,14 +156,17 @@ describe('Instance', () => {
       };
 
       beforeAll(() => {
-        jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-        (readIni as jest.Mock).mockImplementation(() => {
-          return mockProps;
-        });
+        jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
       afterAll(() => {
         jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockProps;
+        });
       });
 
       afterEach(() => {
@@ -163,6 +186,16 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
       });
 
+      test('should return an empty objct is no data is returned by readIni', () => {
+        (readIni as jest.Mock).mockImplementation(() => {
+          return null;
+        });
+        const inst = new Instance('server1', '/path');
+
+        const spInit = inst.sp();
+        expect(spInit).toEqual({});
+      });
+
       test('should modify single property and invalidate the cache', () => {
         const inst = new Instance('server1', '/path');
         const newSp = { server: 'newValue' };
@@ -171,8 +204,8 @@ describe('Instance', () => {
         expect(spInit).toEqual(newSp);
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -190,8 +223,8 @@ describe('Instance', () => {
         expect(spInit).toEqual(newSp);
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -207,14 +240,17 @@ describe('Instance', () => {
       };
 
       beforeAll(() => {
-        jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-        (readIni as jest.Mock).mockImplementation(() => {
-          return mockConfig;
-        });
+        jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
       afterAll(() => {
         jest.restoreAllMocks;
+      });
+
+      beforeEach(() => {
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockConfig;
+        });
       });
 
       afterEach(() => {
@@ -234,6 +270,16 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
       });
 
+      test('should return an empty objct is no data is returned by readIni', () => {
+        (readIni as jest.Mock).mockImplementation(() => {
+          return null;
+        });
+        const inst = new Instance('server1', '/path');
+
+        const scInit = inst.sc();
+        expect(scInit).toEqual({});
+      });
+
       test('should modify single property and invalidate the cache', () => {
         const inst = new Instance('server1', '/path');
         const newSc = { java: { jarfile: 'newValue' } };
@@ -242,8 +288,8 @@ describe('Instance', () => {
         expect(scInit).toEqual(newSc);
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.config');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.config', ini.stringify(newSc));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.config', ini.stringify(newSc));
 
         const scCached = inst.sc();
         expect(scCached).toEqual(mockConfig);
@@ -255,10 +301,7 @@ describe('Instance', () => {
       let mockCron;
 
       beforeAll(() => {
-        jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-        (readIni as jest.Mock).mockImplementation(() => {
-          return mockCron;
-        });
+        jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
       afterAll(() => {
@@ -274,6 +317,9 @@ describe('Instance', () => {
             msg: '',
           },
         };
+        (readIni as jest.Mock).mockImplementation(() => {
+          return mockCron;
+        });
       });
 
       afterEach(() => {
@@ -293,6 +339,16 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
       });
 
+      test('should return an empty objct is no data is returned by readIni', () => {
+        (readIni as jest.Mock).mockImplementation(() => {
+          return null;
+        });
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.crons();
+        expect(ccInit).toEqual({});
+      });
+
       test('should add a new cron task and invalidate the cache', () => {
         const inst = new Instance('server1', '/path');
         const newJob = {
@@ -306,8 +362,8 @@ describe('Instance', () => {
         expect(ccInit).toEqual({ ...mockCron, newJob: { ...newJob, enabled: false } });
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith(
           '/path/servers/server1/cron.config',
           ini.stringify({ ...mockCron, newJob: { ...newJob, enabled: false } })
         );
@@ -324,8 +380,8 @@ describe('Instance', () => {
         expect(ccInit).toEqual({});
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/cron.config', ini.stringify({}));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/cron.config', ini.stringify({}));
 
         const ccCached = inst.crons();
         expect(ccCached).toEqual(mockCron);
@@ -339,8 +395,8 @@ describe('Instance', () => {
         expect(ccInit).toEqual({ job1: { ...mockCron.job1, enabled: false } });
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
-        expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith(
           '/path/servers/server1/cron.config',
           ini.stringify({ job1: { ...mockCron.job1, enabled: false } })
         );
@@ -348,6 +404,223 @@ describe('Instance', () => {
         const ccCached = inst.crons();
         expect(ccCached).toEqual(mockCron);
         expect(readIni).toHaveBeenCalledTimes(2);
+      });
+
+      test('should not make any changes if the cron hash does not exist', () => {
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.setCron('fake', false);
+        expect(ccInit).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+        expect(fsExtra.writeFileSync).not.toHaveBeenCalled();
+      });
+
+      test('should set the enabled property of the cron task and invalidate the cache', () => {
+        const inst = new Instance('server1', '/path');
+
+        const ccInit = inst.setCron('job1', false);
+        expect(ccInit).toEqual({ job1: { ...mockCron.job1, enabled: false } });
+        expect(readIni).toHaveBeenCalledTimes(1);
+        expect(readIni).toHaveBeenCalledWith('/path/servers/server1/cron.config');
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith(
+          '/path/servers/server1/cron.config',
+          ini.stringify({ job1: { ...mockCron.job1, enabled: false } })
+        );
+
+        const ccCached = inst.crons();
+        expect(ccCached).toEqual(mockCron);
+        expect(readIni).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('create', () => {
+      let mockChildEmitter;
+
+      beforeAll(() => {
+        mockChildEmitter = new EventEmitter();
+        jest.spyOn(mockChildEmitter, 'once');
+
+        jest.spyOn(which, 'sync').mockReturnValue('/usr/bin/tar');
+        jest.spyOn(fsExtra, 'ensureDirSync').mockImplementation(() => {});
+        jest.spyOn(fsExtra, 'ensureFileSync').mockImplementation(() => {});
+        jest.spyOn(fsExtra, 'chownSync').mockImplementation(() => {});
+        jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
+        jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from(''));
+        (jest.spyOn(child, 'spawn') as jest.Mock).mockImplementation(() => {
+          return mockChildEmitter;
+        });
+      });
+
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        jest.spyOn(fsExtra.promises, 'stat').mockImplementation(() => { return Promise.reject(); });
+        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+        (jest.spyOn(fsExtra.promises, 'readdir') as jest.Mock).mockReturnValue(Promise.resolve(['/path/archive']));
+      });
+
+      afterEach(() => {
+        jest.clearAllMocks();
+        (fsExtra.promises.stat as jest.Mock).mockReset();
+        (Instance.listRunningInstancePids as jest.Mock).mockReset();
+      });
+
+      test('should not create a server which already exists', async () => {
+        (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.resolve({}));
+
+        const inst = new Instance('server1', '/path');
+        expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
+      });
+
+      // This is an edge case if the files are manually deleted but the instance is not stopped first
+      test('should not create a server which matches a running instance name', async () => {
+        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+        const inst = new Instance('server1', '/path');
+        expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
+      });
+
+      test('should create a regular minecraft server', async () => {
+        const inst = new Instance('server1', '/path');
+        await inst.create({ uid: 1000, gid: 1000 });
+
+        expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.ensureFileSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(4);
+      });
+
+      test('should create an unconventional minecraft server,', async () => {
+        const inst = new Instance('server1', '/path');
+        await inst.create({ uid: 1000, gid: 1000 }, true);
+
+        expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.ensureFileSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      test('should reject creation from archive if file extension is not supported', async () => {
+        const inst = new Instance('server1', '/path');
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.yml')
+        expect(async () => { await promise }).rejects.toBeTruthy();
+      });
+
+      test('should reject creation from archive if tar returns an error', async () => {
+        const inst = new Instance('server1', '/path');
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tgz')
+
+        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit', 1); resolve(); }, 1) });
+        expect(async () => { await promise }).rejects.toBeTruthy();
+      });
+
+      test('should create an archive from a tar file at an absolute path', async () => {
+        const inst = new Instance('server1', '/path');
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar')
+        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit'); resolve(); }, 1) });
+
+        await promise;
+
+        expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.ensureFileSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(4);
+
+        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', '/path/to/archive.tar'], { cwd: inst.env.cwd, uid: 1000, gid: 1000 });
+      });
+
+      test('should create an archive from a tar.gz file in the import directory', async () => {
+        const inst = new Instance('server1', '/path');
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz')
+        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit'); resolve(); }, 1) });
+
+        await promise;
+
+        expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.ensureFileSync).toHaveBeenCalledTimes(3);
+        expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
+        expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(4);
+
+        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', `${inst.env.baseDir}/import/archive.tar.gz`], { cwd: inst.env.cwd, uid: 1000, gid: 1000 });
+      });
+    });
+
+    describe('delete', () => {
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => { return Promise.resolve({}); });
+        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+      });
+
+      afterEach(() => {
+        jest.clearAllMocks();
+        (fsExtra.promises.stat as jest.Mock).mockReset();
+        (Instance.listRunningInstancePids as jest.Mock).mockReset();
+      });
+
+      test('should not delete a server which does not exist', async () => {
+        (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.reject());
+        const inst = new Instance('server1', '/path');
+        expect(async () => inst.delete()).rejects.toBeTruthy();
+      });
+
+      test('should not delete a server which matches a running instance name', async () => {
+        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+        const inst = new Instance('server1', '/path');
+        expect(async () => inst.delete()).rejects.toBeTruthy();
+      });
+
+      test('should force remove all directories', async () => {
+        jest.spyOn(fs.promises, 'rm').mockImplementation(async () => {});
+
+        const inst = new Instance('server1', '/path');
+        await inst.delete();
+
+        const rmOptions = { recursive: true, force: true };
+        expect(fs.promises.rm).toHaveBeenCalledTimes(3);
+        expect(fs.promises.rm).toHaveBeenCalledWith(inst.env.cwd, rmOptions);
+        expect(fs.promises.rm).toHaveBeenCalledWith(inst.env.bwd, rmOptions);
+        expect(fs.promises.rm).toHaveBeenCalledWith(inst.env.awd, rmOptions);
+
+        (fs.promises.rm as jest.Mock).mockReset();
+      });
+    });
+
+    describe('profile', () => {
+
+    });
+
+    describe('minecraft server instance interactions', () => {
+      //const pingReponse = '\xff\x32\xa7\x31\x00127\x001.19.3\x00A Minecraft Server\x000\x0020';
+
+      describe('ping', () => {
+
+      });
+
+      describe('query', () => {
+
+      });
+
+      describe('stuff', () => {
+
+      });
+
+      describe('start', () => {
+
+      });
+
+      describe('stop', () => {
+
+      });
+
+      describe('kill', () => {
+
       });
     });
   });
