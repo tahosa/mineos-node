@@ -22,9 +22,10 @@ export const readIni = (filepath: string, clearOnError = false): { [key: string]
 
     if (clearOnError) {
       fs.writeFileSync(filepath, '');
+      return;
+    } else {
+      throw e;
     }
-
-    return;
   }
 };
 
@@ -85,7 +86,7 @@ export const splitBuffer = (buf: Buffer, delimiter: number): Buffer[] => {
  */
 export const bufferToAscii = (buf: Buffer): string => {
   let retval = '';
-  for (let i = 0; i < buf.length; i++) retval += buf[i] == 0x0000 ? '' : String.fromCharCode(buf[i]);
+  for (let i = 0; i < buf.length; i++) retval += buf[i] === 0x0000 ? '' : String.fromCharCode(buf[i]);
   return retval;
 };
 
@@ -137,7 +138,7 @@ export class PromisePool<T, I> {
    * @param concurrancy Maximum number of concurrent operations
    * @returns PromisePool
    */
-  withConcurrency(concurrancy: number) {
+  withConcurrency(concurrancy: number): PromisePool<T, I> {
     this.concurrancy = concurrancy;
     return this;
   }
@@ -151,16 +152,17 @@ export class PromisePool<T, I> {
     if (this.promise != null) {
       return this.promise;
     }
+    // We want this processor to be able to wait on the next available slot in the pool, so disable this eslint rule
     // eslint-disable-next-line no-async-promise-executor
-    this.promise = new Promise<T[]>(async (res, rej) => {
+    this.promise = new Promise<T[]>(async (resolve, reject) => {
       try {
         for (const elem of this.data) {
           await this._waitAvailable();
-          this._processRecord(elem);
+          this._processRecord(elem).catch((e) => { reject(e); });
         }
-        this.eventEmitter.once(PromisePool.DRAIN, () => res(this.results));
+        this.eventEmitter.once(PromisePool.DRAIN, () => resolve(this.results));
       } catch (e) {
-        rej(e);
+        reject(e);
       }
     });
     return this.promise;
@@ -171,12 +173,14 @@ export class PromisePool<T, I> {
    *
    * @param data Single record to process
    */
-  async _processRecord(data: I) {
+  async _processRecord(data: I): Promise<void> {
     try {
       this.inFlight++;
-      this.results.push(await this.processor(data));
+      const result = await this.processor(data);
+      this.results.push(result);
     } catch (e) {
       this.errors.push([data, e as Error]);
+      return Promise.reject(e);
     } finally {
       this.inFlight--;
       this.processed++;
