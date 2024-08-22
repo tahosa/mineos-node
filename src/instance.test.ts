@@ -4,9 +4,10 @@ import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import ini from 'ini';
+import { Rsync } from 'rsync2';
 import which from 'which';
 
-import { CronTask } from './constants';
+import { CronTask, type ServerConfig } from './constants';
 import './lib/logger';
 import { readIni } from './lib/util';
 
@@ -593,11 +594,117 @@ describe('Instance', () => {
     });
 
     describe('profile', () => {
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
 
+      describe('copyProfile', () => {
+        beforeEach(() => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => { return Promise.resolve({}); });
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+        });
+
+        afterEach(() => {
+          jest.clearAllMocks();
+          (fsExtra.promises.stat as jest.Mock).mockReset();
+          (Instance.listRunningInstancePids as jest.Mock).mockReset();
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.reject());
+
+          const inst = new Instance('server1', '/path');
+          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is running', async () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 123 } });
+
+          const inst = new Instance('server1', '/path');
+          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+        });
+
+        test('should reject if a profile is not set', async () => {
+          const inst = new Instance('server1', '/path');
+          jest.spyOn(inst, 'sc').mockReturnValue({} as ServerConfig);
+          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+        });
+
+        test('should use rsync to copy the profile files', async () => {
+          const mockRsync = {
+            set: jest.fn(),
+            execute: jest.fn().mockReturnValue(Promise.resolve(0))
+          };
+          jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
+          const inst = new Instance('server1', '/path');
+
+          jest.spyOn(inst, 'sc').mockReturnValue({minecraft: {profile: 'vanilla_1.20'}} as ServerConfig);
+          jest.spyOn(inst, 'getOwner').mockResolvedValue({ username: 'user', groupname: 'group', uid: 1000, gid: 1000 })
+
+          const result = await inst.copyProfile()
+          expect(result).toEqual(0);
+          expect(Rsync.build).toHaveBeenCalledWith({
+            source: '/path/profiles/vanilla_1.20/',
+            destination: '/path/servers/server1/',
+            flags: 'au',
+            shell: 'ssh',
+          });
+
+          expect(mockRsync.set).toHaveBeenCalledTimes(2);
+          expect(mockRsync.set.mock.calls).toEqual([['chown', 'user:group'], ['chmod', 'ug=rwX']])
+        });
+      });
+
+      describe('delta', () => {
+        afterEach(() => {
+          jest.resetAllMocks();
+        });
+
+        test('should reject with the error if rsync fails', async () => {
+          const mockRsync = {
+            execute: jest.fn().mockReturnValue(Promise.resolve(1))
+          };
+          jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
+
+          const inst = new Instance('server1', '/path');
+          await expect(() => inst.profileDelta('vanilla_1.20')).rejects.toEqual(1);
+        });
+
+        test('should return the list of file differences', async () => {
+          let mockOutput: (string) => void;
+          const mockRsync = {
+            execute: jest.fn().mockImplementation(() => {
+              mockOutput('rsync header');
+              mockOutput('sent 1234 bytes');
+              mockOutput('file.txt');
+              mockOutput('multiline.md\n\nnextline.toml')
+              mockOutput('rsync trailer');
+
+              return Promise.resolve(0);
+            })
+          };
+          jest.spyOn(Rsync, 'build').mockImplementation((config) => {
+            mockOutput = config.output[0];
+            return mockRsync;
+          });
+
+          const inst = new Instance('server1', '/path');
+          const result = await inst.profileDelta('vanilla_1.20');
+          expect(result).toEqual(['file.txt', 'multiline.md', 'nextline.toml']);
+          expect(Rsync.build).toHaveBeenCalledTimes(1);
+          expect(Rsync.build).toHaveBeenCalledWith({
+            source: '/path/profiles/vanilla_1.20/',
+            destination: '/path/servers/server1/',
+            flags: 'vrun',
+            shell: 'ssh',
+            output: [expect.anything()]
+          })
+        });
+      });
     });
 
     describe('minecraft server instance interactions', () => {
-      //const pingReponse = '\xff\x32\xa7\x31\x00127\x001.19.3\x00A Minecraft Server\x000\x0020';
+      //const pingReponse = '\xff\x32\xa7\x31\x00127\x001.20\x00A Minecraft Server\x000\x0020';
 
       describe('ping', () => {
 

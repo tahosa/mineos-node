@@ -8,7 +8,7 @@ import { constants } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import procfs from 'procfs-stats';
-import rsync from 'rsync2';
+import { Rsync } from 'rsync2';
 import strftime from 'strftime';
 import { Tail } from 'tail';
 import tmp from 'tmp';
@@ -444,7 +444,7 @@ export class Instance {
    */
   async copyProfile(): Promise<number> {
     const rsyncProfile = async (source: string, dest: string, username: string, groupname: string) => {
-      const obj = rsync.build({
+      const obj = Rsync.build({
         source: source,
         destination: dest,
         flags: 'au',
@@ -482,20 +482,16 @@ export class Instance {
    */
   async profileDelta(profile: string): Promise<string[]> {
     const stdout: string[] = [];
-    const stderr: string[] = [];
 
-    const obj = rsync.build({
-      source: path.join(this.env.pwd, profile) + '/',
-      destination: this.env.cwd + '/',
+    const obj = Rsync.build({
+      source: path.join(this.env.pwd, profile) + path.sep,
+      destination: this.env.cwd + path.sep,
       flags: 'vrun', // verbose, recursive, skip-remote-newer, dry-run
       shell: 'ssh',
       output: [
         (output) => {
           stdout.push(output);
-        },
-        (output) => {
-          stderr.push(output);
-        },
+        }
       ],
     });
 
@@ -516,7 +512,7 @@ export class Instance {
         return acc;
       }
 
-      acc.push(...file.split('\n').filter((f) => f));
+      acc.push(...file.split('\n').filter((f) => !!f));
       return acc;
     }, []);
   }
