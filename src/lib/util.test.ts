@@ -15,7 +15,7 @@ jest.mock('./logger', () => ({
   }
 }));
 
-import { readIni, swapBytes, splitBuffer, bufferToAscii, PromisePool } from './util';
+import { readIni, splitBuffer, bufferToAscii, PromisePool } from './util';
 
 describe('readIni', () => {
   afterEach(() => {
@@ -58,19 +58,6 @@ describe('readIni', () => {
     expect(result).toBeUndefined();
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     expect(fs.writeFileSync).toHaveBeenCalledWith('teststring', '');
-  });
-});
-
-describe('swapBytes', () => {
-  test('should throw an error if the input has an odd number of elements', () => {
-    expect(() => {
-      swapBytes(Buffer.from([0x0, 0x1, 0x2]));
-    }).toThrow();
-  });
-
-  test('should swap bytes pair-wise', () => {
-    const result = swapBytes(Buffer.from([0x0, 0x1, 0x2, 0x3]));
-    expect(result).toEqual(Buffer.from([0x1, 0x0, 0x3, 0x2]));
   });
 });
 

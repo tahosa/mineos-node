@@ -17,7 +17,7 @@ import which from 'which';
 
 import { Logger } from './lib/logger';
 import memoize from './lib/memoize';
-import { bufferToAscii, type MinecraftFullStats, readIni, splitBuffer, swapBytes } from './lib/util';
+import { bufferToAscii, type MinecraftFullStats, readIni, splitBuffer } from './lib/util';
 
 import { existsOnSystem } from './auth-new';
 import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS } from './constants';
@@ -561,9 +561,9 @@ export class Instance {
           socket.end();
 
           const legacySplit = splitBuffer(data, 0x00a7);
-          const modernSplit = swapBytes(data.subarray(3)).toString('ucs2').split('\x00').splice(1);
+          const modernSplit = data.subarray(3).swap16().toString('ucs2').split('\x00').splice(1);
 
-          if (modernSplit.length == 5) {
+          if (modernSplit.length === 5) {
             // modern ping to modern server
             resolve({
               protocol: parseInt(modernSplit[0]),
@@ -572,8 +572,8 @@ export class Instance {
               playersOnline: parseInt(modernSplit[3]),
               playersMax: parseInt(modernSplit[4]),
             });
-          } else if (legacySplit.length == 3) {
-            if (String.fromCharCode(legacySplit[0][-1]) == '\u0000') {
+          } else if (legacySplit.length === 3) {
+            if (String.fromCharCode(legacySplit[0][-1]) === '\u0000') {
               // modern ping to legacy server
               resolve({
                 serverVersion: '',
@@ -607,7 +607,7 @@ export class Instance {
     const jarfile = this.sc().java?.jarfile;
     if (!jarfile) {
       return Promise.reject('jarfile not set');
-    } else if (jarfile.slice(-5).toLocaleLowerCase() == '.phar') {
+    } else if (jarfile.slice(-5).toLocaleLowerCase() === '.phar') {
       return Promise.reject('cannot query instances using .phar executables');
     }
 
@@ -930,7 +930,7 @@ export class Instance {
         });
 
         proc.on('exit', (code) => {
-          if (code == 0) {
+          if (code === 0) {
             fs.readFile(newFilepath, (inErr, data) => {
               if (inErr) {
                 reject(inErr);
@@ -993,7 +993,7 @@ export class Instance {
       });
 
       rdiff.on('exit', (code) => {
-        if (code == 0) {
+        if (code === 0) {
           // branch if all is well
           resolve(increments);
         } else {
@@ -1062,7 +1062,7 @@ export class Instance {
       });
 
       rdiff.on('exit', (code) => {
-        if (code == 0) {
+        if (code === 0) {
           // branch if all is well
           resolve(increments);
         } else {
@@ -1118,7 +1118,7 @@ export class Instance {
       });
 
       proc.on('exit', (code) => {
-        if (code == 0) {
+        if (code === 0) {
           // branch if all is well
           resolve();
         } else {
@@ -1496,7 +1496,7 @@ export class Instance {
    */
   async getRunnableJarFiles(): Promise<string[]> {
     const reducer = (acc: { [key: string]: boolean }, f: string) => {
-      if (f.slice(-4).toLowerCase() == '.jar' || f.slice(-5).toLowerCase() == '.phar' || f === 'Cuberite') {
+      if (f.slice(-4).toLowerCase() === '.jar' || f.slice(-5).toLowerCase() === '.phar' || f === 'Cuberite') {
         acc[f] = true;
       }
       return acc;

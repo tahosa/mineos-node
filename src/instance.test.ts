@@ -3,17 +3,13 @@ import child from 'child_process';
 import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
+import net from 'node:net';
 import ini from 'ini';
 import { Rsync } from 'rsync2';
 import which from 'which';
 
 import { CronTask, type ServerConfig } from './constants';
 import './lib/logger';
-import { readIni } from './lib/util';
-
-jest.mock('./lib/util', () => ({
-  readIni: jest.fn(),
-}));
 
 const mockLogger = {
   debug: jest.fn(),
@@ -21,12 +17,20 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   log: jest.fn(),
-}
+};
 
 jest.mock('./lib/logger', () => ({
   Logger: {
-    child: () => mockLogger
-  }
+    child: () => mockLogger,
+  },
+}));
+
+import { readIni } from './lib/util';
+
+jest.mock('./lib/util', () => ({
+  readIni: jest.fn(),
+  splitBuffer: (jest.requireActual('./lib/util') as any).splitBuffer,
+  bufferToAscii: (jest.requireActual('./lib/util') as any).bufferToAscii,
 }));
 
 import { Instance } from './instance';
@@ -93,28 +97,28 @@ describe('Instance', () => {
         unrelated: {},
       };
 
-      (jest.spyOn(fsExtra, 'readdirSync') as unknown as jest.MockedFunction<(path: string) => string[]>).mockReturnValue(
-        Object.keys(mockProcesses)
-      );
-      (jest.spyOn(fsExtra, 'readFileSync') as unknown as jest.MockedFunction<(path: string) => Buffer>).mockImplementation(
-        (path: string) => {
-          const procMatch = path.match(/(\d+)\/(cmdline|environ)$/);
-          if (!procMatch) {
-            throw new Error(`unexpected input to mock: ${path}`);
-          }
-
-          if (mockProcesses[procMatch[1]][procMatch[2]] === 'error') {
-            throw {
-              errno: -13,
-              syscall: 'open',
-              code: 'EACCESS',
-              path,
-            };
-          }
-
-          return Buffer.from(mockProcesses[procMatch[1]][procMatch[2]]);
+      (
+        jest.spyOn(fsExtra, 'readdirSync') as unknown as jest.MockedFunction<(path: string) => string[]>
+      ).mockReturnValue(Object.keys(mockProcesses));
+      (
+        jest.spyOn(fsExtra, 'readFileSync') as unknown as jest.MockedFunction<(path: string) => Buffer>
+      ).mockImplementation((path: string) => {
+        const procMatch = path.match(/(\d+)\/(cmdline|environ)$/);
+        if (!procMatch) {
+          throw new Error(`unexpected input to mock: ${path}`);
         }
-      );
+
+        if (mockProcesses[procMatch[1]][procMatch[2]] === 'error') {
+          throw {
+            errno: -13,
+            syscall: 'open',
+            code: 'EACCESS',
+            path,
+          };
+        }
+
+        return Buffer.from(mockProcesses[procMatch[1]][procMatch[2]]);
+      });
 
       const serverPids = Instance.listRunningInstancePids();
       expect(serverPids).toEqual({
@@ -206,7 +210,10 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
         expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith(
+          '/path/servers/server1/server.properties',
+          ini.stringify(newSp)
+        );
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -225,7 +232,10 @@ describe('Instance', () => {
         expect(readIni).toHaveBeenCalledTimes(1);
         expect(readIni).toHaveBeenCalledWith('/path/servers/server1/server.properties');
         expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(1);
-        expect(fsExtra.writeFileSync).toHaveBeenCalledWith('/path/servers/server1/server.properties', ini.stringify(newSp));
+        expect(fsExtra.writeFileSync).toHaveBeenCalledWith(
+          '/path/servers/server1/server.properties',
+          ini.stringify(newSp)
+        );
 
         const spCached = inst.sp();
         expect(spCached).toEqual(mockProps);
@@ -459,7 +469,9 @@ describe('Instance', () => {
       });
 
       beforeEach(() => {
-        jest.spyOn(fsExtra.promises, 'stat').mockImplementation(() => { return Promise.reject(); });
+        jest.spyOn(fsExtra.promises, 'stat').mockImplementation(() => {
+          return Promise.reject();
+        });
         jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
         (jest.spyOn(fsExtra.promises, 'readdir') as jest.Mock).mockReturnValue(Promise.resolve(['/path/archive']));
       });
@@ -506,22 +518,36 @@ describe('Instance', () => {
 
       test('should reject creation from archive if file extension is not supported', async () => {
         const inst = new Instance('server1', '/path');
-        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.yml')
-        expect(async () => { await promise }).rejects.toBeTruthy();
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.yml');
+        expect(async () => {
+          await promise;
+        }).rejects.toBeTruthy();
       });
 
       test('should reject creation from archive if tar returns an error', async () => {
         const inst = new Instance('server1', '/path');
-        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tgz')
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tgz');
 
-        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit', 1); resolve(); }, 1) });
-        expect(async () => { await promise }).rejects.toBeTruthy();
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            mockChildEmitter.emit('exit', 1);
+            resolve();
+          }, 1);
+        });
+        expect(async () => {
+          await promise;
+        }).rejects.toBeTruthy();
       });
 
       test('should create an archive from a tar file at an absolute path', async () => {
         const inst = new Instance('server1', '/path');
-        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar')
-        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit'); resolve(); }, 1) });
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar');
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            mockChildEmitter.emit('exit');
+            resolve();
+          }, 1);
+        });
 
         await promise;
 
@@ -530,13 +556,22 @@ describe('Instance', () => {
         expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
         expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(4);
 
-        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', '/path/to/archive.tar'], { cwd: inst.env.cwd, uid: 1000, gid: 1000 });
+        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', '/path/to/archive.tar'], {
+          cwd: inst.env.cwd,
+          uid: 1000,
+          gid: 1000,
+        });
       });
 
       test('should create an archive from a tar.gz file in the import directory', async () => {
         const inst = new Instance('server1', '/path');
-        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz')
-        await new Promise<void>((resolve) => { setTimeout(() => { mockChildEmitter.emit('exit'); resolve(); }, 1) });
+        const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz');
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            mockChildEmitter.emit('exit');
+            resolve();
+          }, 1);
+        });
 
         await promise;
 
@@ -545,7 +580,11 @@ describe('Instance', () => {
         expect(fsExtra.chownSync).toHaveBeenCalledTimes(6);
         expect(fsExtra.writeFileSync).toHaveBeenCalledTimes(4);
 
-        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', `${inst.env.baseDir}/import/archive.tar.gz`], { cwd: inst.env.cwd, uid: 1000, gid: 1000 });
+        expect(child.spawn).toHaveBeenCalledWith('/usr/bin/tar', ['-xf', `${inst.env.baseDir}/import/archive.tar.gz`], {
+          cwd: inst.env.cwd,
+          uid: 1000,
+          gid: 1000,
+        });
       });
     });
 
@@ -555,7 +594,9 @@ describe('Instance', () => {
       });
 
       beforeEach(() => {
-        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => { return Promise.resolve({}); });
+        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+          return Promise.resolve({});
+        });
         jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
       });
 
@@ -600,7 +641,9 @@ describe('Instance', () => {
 
       describe('copyProfile', () => {
         beforeEach(() => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => { return Promise.resolve({}); });
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.resolve({});
+          });
           jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
         });
 
@@ -633,15 +676,17 @@ describe('Instance', () => {
         test('should use rsync to copy the profile files', async () => {
           const mockRsync = {
             set: jest.fn(),
-            execute: jest.fn().mockReturnValue(Promise.resolve(0))
+            execute: jest.fn().mockReturnValue(Promise.resolve(0)),
           };
           jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
           const inst = new Instance('server1', '/path');
 
-          jest.spyOn(inst, 'sc').mockReturnValue({minecraft: {profile: 'vanilla_1.20'}} as ServerConfig);
-          jest.spyOn(inst, 'getOwner').mockResolvedValue({ username: 'user', groupname: 'group', uid: 1000, gid: 1000 })
+          jest.spyOn(inst, 'sc').mockReturnValue({ minecraft: { profile: 'vanilla_1.20' } } as ServerConfig);
+          jest
+            .spyOn(inst, 'getOwner')
+            .mockResolvedValue({ username: 'user', groupname: 'group', uid: 1000, gid: 1000 });
 
-          const result = await inst.copyProfile()
+          const result = await inst.copyProfile();
           expect(result).toEqual(0);
           expect(Rsync.build).toHaveBeenCalledWith({
             source: '/path/profiles/vanilla_1.20/',
@@ -651,7 +696,10 @@ describe('Instance', () => {
           });
 
           expect(mockRsync.set).toHaveBeenCalledTimes(2);
-          expect(mockRsync.set.mock.calls).toEqual([['chown', 'user:group'], ['chmod', 'ug=rwX']])
+          expect(mockRsync.set.mock.calls).toEqual([
+            ['chown', 'user:group'],
+            ['chmod', 'ug=rwX'],
+          ]);
         });
       });
 
@@ -662,7 +710,7 @@ describe('Instance', () => {
 
         test('should reject with the error if rsync fails', async () => {
           const mockRsync = {
-            execute: jest.fn().mockReturnValue(Promise.resolve(1))
+            execute: jest.fn().mockReturnValue(Promise.resolve(1)),
           };
           jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
 
@@ -677,11 +725,11 @@ describe('Instance', () => {
               mockOutput('rsync header');
               mockOutput('sent 1234 bytes');
               mockOutput('file.txt');
-              mockOutput('multiline.md\n\nnextline.toml')
+              mockOutput('multiline.md\n\nnextline.toml');
               mockOutput('rsync trailer');
 
               return Promise.resolve(0);
-            })
+            }),
           };
           jest.spyOn(Rsync, 'build').mockImplementation((config) => {
             mockOutput = config.output[0];
@@ -697,38 +745,124 @@ describe('Instance', () => {
             destination: '/path/servers/server1/',
             flags: 'vrun',
             shell: 'ssh',
-            output: [expect.anything()]
-          })
+            output: [expect.anything()],
+          });
         });
       });
     });
 
     describe('minecraft server instance interactions', () => {
-      //const pingReponse = '\xff\x32\xa7\x31\x00127\x001.20\x00A Minecraft Server\x000\x0020';
+      let inst: Instance;
+      let mockSocket;
+
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+        inst = new Instance('server1', '/path');
+        jest.spyOn(inst, 'sp').mockReturnValue({ 'server-port': 25565 });
+        jest.spyOn(inst, 'sc').mockReturnValue({
+          java: { jarfile: 'minecraft_server.jar' },
+        } as ServerConfig);
+
+        mockSocket = new EventEmitter() as net.Socket;
+        mockSocket.setTimeout = jest.fn() as any;
+        mockSocket.connect = jest.fn() as any;
+        mockSocket.write = jest.fn() as any;
+        mockSocket.end = jest.fn() as any;
+
+        jest.spyOn(net, 'Socket').mockImplementation(() => mockSocket);
+      });
+
+      afterEach(() => {
+        jest.resetAllMocks();
+      });
 
       describe('ping', () => {
+        test('should reject if there is not a port set for the instance', async () => {
+          (inst.sp as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.ping()).rejects.toBeTruthy();
+        });
 
+        test('should reject if the instance is a phar server', async () => {
+          (inst.sc as jest.Mock).mockReturnValue({ java: { jarfile: 'server.phar' } });
+          await expect(async () => inst.ping()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is not running', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.ping()).rejects.toBeTruthy();
+        });
+
+        test('should reject if there is an error on the socket', async () => {
+          const promise = inst.ping().catch((err) => {
+            expect(err).toEqual('error');
+          });
+
+          mockSocket.emit('error', 'error');
+          await promise;
+        });
+
+        test('should return data for legacy minecraft servers', async () => {
+          const legacyResponse = Buffer.from([
+            0xff, 0x00, 0x17, 0x00, 0x41, 0x00, 0x20, 0x00, 0x4d, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x65, 0x00, 0x63, 0x00,
+            0x72, 0x00, 0x61, 0x00, 0x66, 0x00, 0x74, 0x00, 0x20, 0x00, 0x53, 0x00, 0x65, 0x00, 0x72, 0x00, 0x76, 0x00,
+            0x65, 0x00, 0x72, 0x00, 0xa7, 0x00, 0x30, 0x00, 0xa7, 0x00, 0x32, 0x00, 0x30,
+          ]);
+          const promise = inst.ping();
+          mockSocket.emit('connect');
+          mockSocket.emit('data', legacyResponse);
+
+          const data = await promise;
+
+          expect(data.serverVersion).toEqual('');
+          expect(data.motd).toEqual('A Minecraft Server');
+          expect(data.playersOnline).toEqual(0);
+          expect(data.playersMax).toEqual(20);
+          expect(data.protocol).toBeUndefined();
+
+          expect(mockSocket.write).toHaveBeenCalled();
+          expect(mockSocket.end).toHaveBeenCalled();
+          expect(mockSocket.connect).toHaveBeenCalledWith({ port: 25565 });
+        });
+
+        test('should return data for modern minecraft servers', async () => {
+          const modernResponse = Buffer.from([
+            0xff, 0x00, 0x25, 0x00, 0xa7, 0x00, 0x31, 0x00, 0x00, 0x00, 0x31, 0x00, 0x32, 0x00, 0x37, 0x00, 0x00, 0x00,
+            0x31, 0x00, 0x2e, 0x00, 0x32, 0x00, 0x30, 0x00, 0x00, 0x00, 0x41, 0x00, 0x20, 0x00, 0x4d, 0x00, 0x69, 0x00,
+            0x6e, 0x00, 0x65, 0x00, 0x63, 0x00, 0x72, 0x00, 0x61, 0x00, 0x66, 0x00, 0x74, 0x00, 0x20, 0x00, 0x53, 0x00,
+            0x65, 0x00, 0x72, 0x00, 0x76, 0x00, 0x65, 0x00, 0x72, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x32, 0x00,
+            0x30,
+          ]);
+          const promise = inst.ping();
+          mockSocket.emit('connect');
+          mockSocket.emit('data', modernResponse);
+
+          const data = await promise;
+
+          expect(data.serverVersion).toEqual('1.20');
+          expect(data.protocol).toEqual(127);
+          expect(data.motd).toEqual('A Minecraft Server');
+          expect(data.playersOnline).toEqual(0);
+          expect(data.playersMax).toEqual(20);
+
+          expect(mockSocket.write).toHaveBeenCalled();
+          expect(mockSocket.end).toHaveBeenCalled();
+          expect(mockSocket.connect).toHaveBeenCalledWith({ port: 25565 });
+        });
       });
 
-      describe('query', () => {
+      describe('query', () => {});
 
-      });
+      describe('stuff', () => {});
 
-      describe('stuff', () => {
+      describe('start', () => {});
 
-      });
+      describe('stop', () => {});
 
-      describe('start', () => {
-
-      });
-
-      describe('stop', () => {
-
-      });
-
-      describe('kill', () => {
-
-      });
+      describe('kill', () => {});
     });
   });
 });

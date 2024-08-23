@@ -30,26 +30,6 @@ export const readIni = (filepath: string, clearOnError = false): { [key: string]
 };
 
 /**
- * Swap the order (big-endian or little-endian) of bytes in a buffer
- *
- * @param buffer Source buffer
- * @returns Buffer with byte order swapped
- */
-export const swapBytes = (buffer: Buffer): Buffer => {
-  //http://stackoverflow.com/a/7460958/1191579
-  const l = buffer.length;
-  if (l & 0x01) {
-    throw new Error('buffer length must be even');
-  }
-  for (let i = 0; i < l; i += 2) {
-    const a = buffer[i];
-    buffer[i] = buffer[i + 1];
-    buffer[i + 1] = a;
-  }
-  return buffer;
-};
-
-/**
  * Divide a source buffer into multiple sub-buffers by splitting on a binary character
  *
  * @param buf Source buffer
@@ -87,7 +67,7 @@ export const splitBuffer = (buf: Buffer, delimiter: number): Buffer[] => {
 export const bufferToAscii = (buf: Buffer): string => {
   let retval = '';
   for (let i = 0; i < buf.length; i++) retval += buf[i] === 0x0000 ? '' : String.fromCharCode(buf[i]);
-  return retval;
+  return retval.normalize();
 };
 
 /**
