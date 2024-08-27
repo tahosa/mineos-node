@@ -41,10 +41,12 @@ describe('readIni', () => {
     jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
       throw err;
     });
+    jest.spyOn(fs, 'writeFileSync');
 
     expect(() => {
       readIni('teststring');
     }).toThrowError(err);
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
   test('should write an empty file on error if clearOnError is set', () => {
@@ -52,7 +54,7 @@ describe('readIni', () => {
     jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
       throw err;
     });
-    jest.spyOn(fs, 'writeFileSync');
+    jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
 
     const result = readIni('teststring', true);
     expect(result).toBeUndefined();

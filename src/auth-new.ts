@@ -1,7 +1,7 @@
 import crypt from 'apache-crypt';
 import fs from 'node:fs';
 import hash from 'sha512crypt-node';
-import nodePosix from 'posix';
+import nodePosix from '@ilb/posix';
 import passwd from 'etc-passwd';
 import userid from 'userid';
 

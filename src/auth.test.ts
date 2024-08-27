@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import crypt from 'apache-crypt';
 import fs from 'node:fs'
-import nodePosix from 'posix';
+import nodePosix from '@ilb/posix';
 import hash from 'sha512crypt-node';
 import userid from 'userid';
 
