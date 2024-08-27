@@ -639,7 +639,7 @@ export class Instance {
     };
     const binary = which.sync('screen');
 
-    if (!(await this.exists()) && (await this.isUp())) {
+    if (!(await this.exists()) || !this.isUp()) {
       throw new Error(`instance ${this.name} does not exist or is not running`);
     }
 
@@ -661,7 +661,7 @@ export class Instance {
     const profileStatus = await this.profileDelta(this.sc().minecraft?.profile || '').catch((err) => {
       if (err === 23) {
         // source dir of profile non-existent
-        // ignore issue; profile non-essential to start (server_jar is req'd only)
+        // ignore issue; only server_jar is required to start
         return [];
       }
 

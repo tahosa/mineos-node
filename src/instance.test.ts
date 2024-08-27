@@ -8,6 +8,9 @@ import ini from 'ini';
 import { Rsync } from 'rsync2';
 import which from 'which';
 
+import mcquery from 'mcquery';
+jest.mock('mcquery');
+
 import { CronTask, type ServerConfig } from './constants';
 import './lib/logger';
 
@@ -760,12 +763,23 @@ describe('Instance', () => {
       });
 
       beforeEach(() => {
+        jest.spyOn(which, 'sync').mockReturnValue('/usr/bin/screen');
+        jest.spyOn(child, 'execFileSync').mockReturnValue(Buffer.from('result'));
+        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+          return Promise.resolve({});
+        });
         jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
         inst = new Instance('server1', '/path');
         jest.spyOn(inst, 'sp').mockReturnValue({ 'server-port': 25565 });
         jest.spyOn(inst, 'sc').mockReturnValue({
           java: { jarfile: 'minecraft_server.jar' },
         } as ServerConfig);
+        jest.spyOn(inst, 'getOwner').mockReturnValue(Promise.resolve({
+          uid: 1000,
+          gid: 1000,
+          username: 'user',
+          groupname: 'group'
+        }));
 
         mockSocket = new EventEmitter() as net.Socket;
         mockSocket.setTimeout = jest.fn() as any;
@@ -854,9 +868,67 @@ describe('Instance', () => {
         });
       });
 
-      describe('query', () => {});
+      describe('query', () => {
+        test('should reject if there is not a port set for the instance', async () => {
+          (inst.sc as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.query()).rejects.toBeTruthy();
+        });
 
-      describe('stuff', () => {});
+        test('should reject if the instance is a phar server', async () => {
+          (inst.sc as jest.Mock).mockReturnValue({ java: { jarfile: 'server.phar' } });
+          await expect(async () => inst.query()).rejects.toBeTruthy();
+        });
+
+        test('should reject if there is an error querying the server', async () => {
+          const mockMcqueryInstance = {
+            full_stat: jest.fn().mockImplementation((cb: any) => { cb(new Error('error')) }),
+            connect: () => Promise.resolve()
+          };
+          mcquery.mockReturnValue(mockMcqueryInstance);
+          await expect(async () => inst.query()).rejects.toBeTruthy();
+        });
+
+        test('should return the value from mcquery', async () => {
+          const mockMcqueryInstance = {
+            full_stat: jest.fn().mockImplementation((cb: any) => { cb(null, {data: 'value'}) }),
+            connect: () => Promise.resolve()
+          };
+          mcquery.mockReturnValue(mockMcqueryInstance);
+
+          const result = await inst.query();
+          expect(result).toEqual({data: 'value'});
+        });
+      });
+
+      describe('stuff', () => {
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is not running', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
+        });
+
+        test('should call screen with the command', async () => {
+          const result = await inst.stuff('command');
+          expect(result).toEqual('result');
+          expect(child.execFileSync).toHaveBeenCalledWith(
+            '/usr/bin/screen',
+            ['-S', 'mc-server1', '-p', '0', '-X', 'eval', 'stuff "command\x0a"'],
+            {
+              cwd: inst.env.cwd,
+              uid: 1000,
+              gid: 1000,
+              username: 'user',
+              groupname: 'group'
+            }
+          )
+        });
+      });
 
       describe('start', () => {});
 

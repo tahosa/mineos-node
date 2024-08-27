@@ -12,7 +12,7 @@ import procfs from 'procfs-stats';
 import { check } from 'diskusage';
 import which from 'which';
 import child from 'child_process';
-import rsync from 'rsync';
+import Rsync from 'rsync2';
 import dgram from 'dgram';
 import Fireworm from 'fireworm/index';
 import request from 'request';
@@ -492,7 +492,7 @@ export default class server {
             }
             dest_path = path.join(base_dir, DIRS['servers'], args.server_name) + '/';
 
-            const obj = rsync.build({
+            const obj = Rsync.build({
               source: spigot_path,
               destination: dest_path,
               flags: 'au',
