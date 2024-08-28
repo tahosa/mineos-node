@@ -657,7 +657,6 @@ export class Instance {
     }
 
     const owner = await this.getOwner();
-    const startArgs = this.getStartArgs();
     const profileStatus = await this.profileDelta(this.sc().minecraft?.profile || '').catch((err) => {
       if (err === 23) {
         // source dir of profile non-existent
@@ -675,7 +674,7 @@ export class Instance {
     const binary = which.sync('screen');
     const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
 
-    const proc = child.spawn(binary, startArgs || [], params);
+    const proc = child.spawn(binary, this.getStartArgs(), params);
     return await new Promise<void>((resolve, reject) => {
       proc.once('close', (code) => {
         if (code) {

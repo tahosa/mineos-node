@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import child from 'child_process';
+import child, { ChildProcess } from 'child_process';
 import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
@@ -773,13 +773,19 @@ describe('Instance', () => {
         jest.spyOn(inst, 'sp').mockReturnValue({ 'server-port': 25565 });
         jest.spyOn(inst, 'sc').mockReturnValue({
           java: { jarfile: 'minecraft_server.jar' },
+          minecraft: { profile: 'profile' }
         } as ServerConfig);
-        jest.spyOn(inst, 'getOwner').mockReturnValue(Promise.resolve({
-          uid: 1000,
-          gid: 1000,
-          username: 'user',
-          groupname: 'group'
-        }));
+        jest.spyOn(inst, 'getOwner').mockReturnValue(
+          Promise.resolve({
+            uid: 1000,
+            gid: 1000,
+            username: 'user',
+            groupname: 'group',
+          })
+        );
+        jest.spyOn(inst, 'getStartArgs').mockReturnValue(['arg1', 'arg2']);
+        jest.spyOn(inst, 'profileDelta').mockReturnValue(Promise.resolve([]));
+        jest.spyOn(inst, 'copyProfile').mockReturnValue(Promise.resolve(0));
 
         mockSocket = new EventEmitter() as net.Socket;
         mockSocket.setTimeout = jest.fn() as any;
@@ -881,8 +887,10 @@ describe('Instance', () => {
 
         test('should reject if there is an error querying the server', async () => {
           const mockMcqueryInstance = {
-            full_stat: jest.fn().mockImplementation((cb: any) => { cb(new Error('error')) }),
-            connect: () => Promise.resolve()
+            full_stat: jest.fn().mockImplementation((cb: any) => {
+              cb(new Error('error'));
+            }),
+            connect: () => Promise.resolve(),
           };
           mcquery.mockReturnValue(mockMcqueryInstance);
           await expect(async () => inst.query()).rejects.toBeTruthy();
@@ -890,13 +898,15 @@ describe('Instance', () => {
 
         test('should return the value from mcquery', async () => {
           const mockMcqueryInstance = {
-            full_stat: jest.fn().mockImplementation((cb: any) => { cb(null, {data: 'value'}) }),
-            connect: () => Promise.resolve()
+            full_stat: jest.fn().mockImplementation((cb: any) => {
+              cb(null, { data: 'value' });
+            }),
+            connect: () => Promise.resolve(),
           };
           mcquery.mockReturnValue(mockMcqueryInstance);
 
           const result = await inst.query();
-          expect(result).toEqual({data: 'value'});
+          expect(result).toEqual({ data: 'value' });
         });
       });
 
@@ -924,13 +934,147 @@ describe('Instance', () => {
               uid: 1000,
               gid: 1000,
               username: 'user',
-              groupname: 'group'
+              groupname: 'group',
             }
-          )
+          );
         });
       });
 
-      describe('start', () => {});
+      describe('start', () => {
+        let mockChild;
+
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
+
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+          mockChild = new EventEmitter();
+          jest.spyOn(mockChild, 'once');
+          (jest.spyOn(child, 'spawn') as jest.Mock).mockReturnValue(mockChild);
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.start()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is already running', async () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+          await expect(async () => inst.start()).rejects.toBeTruthy();
+        });
+
+        test('should reject if copying the profile results in an error', async () => {
+          (inst.profileDelta as jest.Mock).mockReturnValue(Promise.reject(1));
+          await expect(async () => inst.start()).rejects.toBeTruthy();
+        });
+
+        test('should assume sensible defaults if the profile and start args are missing', async () => {
+          (inst.sc as jest.Mock).mockReturnValue({});
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2001);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+          expect(inst.copyProfile).not.toHaveBeenCalled();
+        });
+
+        test('should ignore errors if the profile source directory does not exist', async () => {
+          (inst.profileDelta as jest.Mock).mockReturnValue(Promise.reject(23));
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2001);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+          expect(inst.copyProfile).not.toHaveBeenCalled();
+        });
+
+        test('should copy the profile when the instance starts if there are any files', async () => {
+          (inst.profileDelta as jest.Mock).mockReturnValue(Promise.resolve(['file']));
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2001);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+          expect(inst.copyProfile).toHaveBeenCalled();
+        });
+
+        test('should reject if the instance exits with an error code within the timeout', async () => {
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          mockChild.emit('close', 1);
+
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+        });
+
+        test('should resolve if the process does not close within the timeout', async () => {
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2001);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+        });
+
+        test('should resolve if the process exits cleanly within the timeout', async () => {
+          const promise = inst.start();
+          await new Promise(process.nextTick);
+
+          mockChild.emit('close', 0);
+
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith('/usr/bin/screen', ['arg1', 'arg2'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+        });
+      });
 
       describe('stop', () => {});
 
