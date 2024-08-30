@@ -696,8 +696,12 @@ export class Instance {
     let iterations = 0;
     const MAX_ITERATIONS_TO_QUIT = 150;
 
-    if (!(await this.exists()) || !this.isUp()) {
-      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    if (!(await this.exists())) {
+      return Promise.reject(`instance ${this.name} does not exist`);
+    }
+
+    if(!this.isUp()) {
+      return;
     }
 
     await this.stuff('stop');
@@ -717,25 +721,13 @@ export class Instance {
   }
 
   /**
-   * Restart the instance
-   */
-  async restart(): Promise<void> {
-    await this.stop();
-    return await this.start();
-  }
-
-  /**
-   * Stop the instance and run a backup
-   */
-  async stopAndBackup(): Promise<void> {
-    await this.stop();
-    return await this.backup();
-  }
-
-  /**
    * Kill the java process for this instance
    */
   async kill(): Promise<void> {
+    if (!(await this.exists())) {
+      return Promise.reject(`instance ${this.name} does not exist`);
+    }
+
     const pids = Instance.listRunningInstancePids();
 
     if (!(this.name in pids)) {
@@ -770,23 +762,38 @@ export class Instance {
   }
 
   /**
+   * Restart the instance
+   */
+  async restart(): Promise<void> {
+    await this.stop();
+    return await this.start();
+  }
+
+  /**
+   * Stop the instance and run a backup
+   */
+  async stopAndBackup(): Promise<void> {
+    await this.stop();
+    return await this.backup();
+  }
+
+  /**
    * Send a save command to the Minecraft process
    *
    * @param delay Seconds to wait
    */
   async saveall(delay: number = 5): Promise<void> {
-    const FALLBACK_DELAY_SECONDS = 5;
-
     if (!(await this.exists()) || !this.isUp()) {
       return Promise.reject(`instance ${this.name} does not exist or is not running`);
     }
     await this.stuff('save-all');
     return await new Promise<void>((resolve) => {
-      setTimeout(() => resolve(), (delay || FALLBACK_DELAY_SECONDS) * 1000);
+      setTimeout(() => resolve(), delay * 1000);
     });
   }
 
   /**
+   * Send a save command to the Minecraft process and watch the server log to make sure it saves
    *
    * @returns True if the server was able to
    */
@@ -814,6 +821,8 @@ export class Instance {
           resolve();
         }
       });
+
+      this.stuff('save-all');
 
       const timeout = setTimeout(() => {
         tail.unwatch();

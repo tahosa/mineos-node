@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import child, { ChildProcess } from 'child_process';
+import child from 'child_process';
 import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
@@ -10,6 +10,9 @@ import which from 'which';
 
 import mcquery from 'mcquery';
 jest.mock('mcquery');
+
+import { Tail } from 'tail';
+jest.mock('tail');
 
 import { CronTask, type ServerConfig } from './constants';
 import './lib/logger';
@@ -1076,9 +1079,276 @@ describe('Instance', () => {
         });
       });
 
-      describe('stop', () => {});
+      describe('stop', () => {
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
 
-      describe('kill', () => {});
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+          jest.spyOn(inst, 'stuff').mockImplementation((command) => Promise.resolve(command));
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.stop()).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the instance is not running', async () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+          await inst.stop();
+        });
+
+        test('should resolve if the instance exits within the iteration counter', async () => {
+          let counter = 0;
+          jest.spyOn(Instance, 'listRunningInstancePids').mockImplementation(() => {
+            if (counter === 0) {
+              counter++;
+              return { server1: { java: 1000 } } as any;
+            }
+            counter ++;
+            return {};
+          });
+
+          const promise = inst.stop();
+          await new Promise(process.nextTick);
+          jest.advanceTimersByTime(200);
+          await new Promise(process.nextTick);
+
+          await promise;
+        });
+
+        test('should reject if the instance does not stop within the iteration counter', async () => {
+          const promise = inst.stop();
+          await new Promise(process.nextTick);
+
+          for(let i = 0; i < 150; i++) {
+            await new Promise(process.nextTick);
+            jest.advanceTimersByTime(200);
+          }
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+      });
+
+      describe('kill', () => {
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
+
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+          jest.spyOn(process, 'kill').mockImplementation(() => true);
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.kill()).rejects.toBeTruthy();
+        });
+
+        test('should reject if there is no running java process', async () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 1001 } });
+          await expect(async () => inst.kill()).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the instance has no running processes', async () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+          await inst.kill();
+        });
+
+        test('should resolve if the instance exits within the iteration counter', async () => {
+          let counter = 0;
+          jest.spyOn(Instance, 'listRunningInstancePids').mockImplementation(() => {
+            if (counter === 0) {
+              counter++;
+              return { server1: { java: 1000 } } as any;
+            }
+            counter ++;
+            return {};
+          });
+
+          const promise = inst.kill();
+          await new Promise(process.nextTick);
+          jest.advanceTimersByTime(200);
+          await new Promise(process.nextTick);
+
+          await promise;
+        });
+
+        test('should reject if the instance does not stop within the iteration counter', async () => {
+          const promise = inst.kill();
+          await new Promise(process.nextTick);
+
+          for(let i = 0; i < 150; i++) {
+            await new Promise(process.nextTick);
+            jest.advanceTimersByTime(200);
+          }
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+      });
+
+      describe('restart', () => {
+        beforeEach(() => {
+          jest.spyOn(inst, 'stop').mockReturnValue(Promise.resolve());
+          jest.spyOn(inst, 'start').mockReturnValue(Promise.resolve());
+        });
+
+        it('should reject if the instance fails to stop', async () => {
+          jest.spyOn(inst, 'stop').mockReturnValue(Promise.reject(new Error('error')));
+          await expect(async () => inst.restart()).rejects.toBeTruthy();
+        });
+
+        it('should reject if the instance fails to start', async () => {
+          jest.spyOn(inst, 'start').mockReturnValue(Promise.reject(new Error('error')));
+          await expect(async () => inst.restart()).rejects.toBeTruthy();
+        });
+
+        it('should resolve if the instance succesfully restarts', async () => {
+          await inst.restart();
+          expect(inst.stop).toHaveBeenCalledTimes(1);
+          expect(inst.start).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      describe('stopAndBackup', () => {
+        beforeEach(() => {
+          jest.spyOn(inst, 'stop').mockReturnValue(Promise.resolve());
+          jest.spyOn(inst, 'backup').mockReturnValue(Promise.resolve());
+        });
+
+        it('should reject if the instance fails to stop', async () => {
+          jest.spyOn(inst, 'stop').mockReturnValue(Promise.reject(new Error('error')));
+          await expect(async () => inst.stopAndBackup()).rejects.toBeTruthy();
+        });
+
+        it('should reject if the instance fails to run the backup', async () => {
+          jest.spyOn(inst, 'backup').mockReturnValue(Promise.reject(new Error('error')));
+          await expect(async () => inst.stopAndBackup()).rejects.toBeTruthy();
+        });
+
+        it('should resolve if the instance succesfully restarts', async () => {
+          await inst.stopAndBackup();
+          expect(inst.stop).toHaveBeenCalledTimes(1);
+          expect(inst.backup).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      describe('saveall', () => {
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
+
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          jest.spyOn(inst, 'stuff').mockReturnValue(Promise.resolve(''));
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is not running', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+        });
+
+        test('should reject if stuff fails to send the command', async () => {
+          jest.spyOn(inst, 'stuff').mockReturnValue(Promise.reject(new Error('error')));
+          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+        });
+
+        test('should wait the configured amount of time before resolving', async () => {
+          const promise = inst.saveall(2);
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2000);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(inst.stuff).toHaveBeenCalledWith('save-all');
+        });
+      });
+
+      describe('saveallLatestLog', () => {
+        let mockTail;
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
+
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          jest.spyOn(inst, 'stuff').mockReturnValue(Promise.resolve(''));
+          mockTail = new EventEmitter();
+          (mockTail as any).unwatch = jest.fn();
+
+          Tail.mockReturnValue(mockTail);
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
+            return Promise.reject();
+          });
+          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is not running', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the tail cannot be started', async () => {
+          Tail.mockImplementation(() => { throw new Error('error') });
+          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the save message is not seen before the timeout', async () => {
+          const promise = inst.saveallLatestLog();
+
+          await new Promise(process.nextTick);
+          jest.advanceTimersByTime(10000);
+          await new Promise(process.nextTick);
+
+          await expect(async () => promise).rejects.toBeTruthy();
+          expect(inst.stuff).toHaveBeenCalledWith('save-all');
+          expect(mockTail.unwatch).toHaveBeenCalled();
+        });
+
+        test('should resolve once the save message is seen', async () => {
+          const promise = inst.saveallLatestLog();
+          await new Promise(process.nextTick);
+
+          mockTail.emit('line', '[INFO]: Saved the world')
+
+          jest.advanceTimersByTime(100);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(inst.stuff).toHaveBeenCalledWith('save-all');
+          expect(mockTail.unwatch).toHaveBeenCalled();
+        });
+      });
     });
   });
 });
