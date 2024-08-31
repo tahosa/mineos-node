@@ -2,7 +2,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import child from 'child_process';
 import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
-import fs from 'node:fs';
+import fs, { type Stats } from 'node:fs';
 import net from 'node:net';
 import ini from 'ini';
 import { Rsync } from 'rsync2';
@@ -1411,7 +1411,9 @@ describe('Instance', () => {
             '/usr/bin/tar',
             [
               'czf',
-              expect.stringMatching(/^\/path\/archive\/server1\/server-server1_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.tgz$/),
+              expect.stringMatching(
+                /^\/path\/archive\/server1\/server-server1_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.tgz$/
+              ),
               '.',
             ],
             { cwd: '/path/servers/server1', uid: 1000, gid: 1000 }
@@ -1502,17 +1504,288 @@ describe('Instance', () => {
         });
       });
 
-      describe('previousVersions', () => {});
+      describe('previousVersion', () => {
+        beforeEach(() => {
+          jest.spyOn(fs.promises, 'readFile').mockReturnValue(Promise.resolve(Buffer.from('file contents')));
+          jest.spyOn(fs.promises, 'mkdtemp').mockImplementation((prefix) => Promise.resolve(`${prefix}-mock`));
+        });
 
-      describe('listIncrements', () => {});
+        test('should reject if a temporary file cannot be created', async () => {
+          (fs.promises.mkdtemp as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.previousVersion('filename', 1)).rejects.toBeTruthy();
+        });
 
-      describe('listIncrementSizes', () => {});
+        test('should reject if rdiff-backup has an error', async () => {
+          const promise = inst.previousVersion('filename', 1);
+          await new Promise(process.nextTick);
 
-      describe('listArchives', () => {});
+          mockChildEmitter.emit('error', new Error('error'));
+          await new Promise(process.nextTick);
 
-      describe('prune', () => {});
+          await expect(() => promise).rejects.toBeTruthy();
+        });
 
-      describe('deleteArchive', () => {});
+        test('should reject if rdiff-backup returns an error status', async () => {
+          const promise = inst.previousVersion('filename', 1);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should reject if reading the temp file has an error', async () => {
+          (fs.promises.readFile as jest.Mock).mockReturnValue(Promise.reject('error'));
+          const promise = inst.previousVersion('filename', 1);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should resolve with the contents of the file', async () => {
+          const promise = inst.previousVersion('filename', 1);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result).toEqual('file contents');
+        });
+      });
+
+      describe('listIncrements', () => {
+        let mockStdout: EventEmitter;
+
+        beforeEach(() => {
+          mockStdout = new EventEmitter();
+          (mockChildEmitter as any).stdout = mockStdout;
+        });
+
+        test('should reject if rdiff-backup has an error', async () => {
+          const promise = inst.listIncrements();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('error', new Error('error'));
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should reject if rdiff-backup returns an error status', async () => {
+          const promise = inst.listIncrements();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should filter non-matching lines and return increments in a guaranteed order', async () => {
+          const promise = inst.listIncrements();
+          await new Promise(process.nextTick);
+
+          const mockIncrements = `
+Found 4 increments:
+    increments.2024-01-01T00:00:00Z.dir   Mon Jan  1 00:00:00 2024
+    increments.2024-04-30T00:00:00Z.dir   Mon Apr 30 00:00:00 2024
+    increments.2024-02-01T00:00:00Z.dir   Thu Feb  1 00:00:00 2024
+    increments.2024-03-01T00:00:00Z.dir   Fri Mar  1 00:00:00 2024
+Current Mirror: Mon Apr 30 00:00:00 2024
+          `;
+
+          mockStdout.emit('data', mockIncrements);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result.length).toEqual(4);
+
+          expect(result[0].time).toEqual('Mon Apr 30 00:00:00 2024');
+          expect(result[0].step).toEqual('0B');
+
+          expect(result[1].time).toEqual('Fri Mar  1 00:00:00 2024');
+          expect(result[1].step).toEqual('1B');
+
+          expect(result[2].time).toEqual('Thu Feb  1 00:00:00 2024');
+          expect(result[2].step).toEqual('2B');
+
+          expect(result[3].time).toEqual('Mon Jan  1 00:00:00 2024');
+          expect(result[3].step).toEqual('3B');
+        });
+      });
+
+      describe('listIncrementSizes', () => {
+        let mockStdout: EventEmitter;
+
+        beforeEach(() => {
+          mockStdout = new EventEmitter();
+          (mockChildEmitter as any).stdout = mockStdout;
+        });
+
+        test('should reject if rdiff-backup has an error', async () => {
+          const promise = inst.listIncrementSizes();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('error', new Error('error'));
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should reject if rdiff-backup returns an error status', async () => {
+          const promise = inst.listIncrementSizes();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should filter non-matching lines and return increments in a guaranteed order', async () => {
+          const promise = inst.listIncrementSizes();
+          await new Promise(process.nextTick);
+
+          const mockIncrements = `
+        Time                       Size        Cumulative size
+------------------------------------------------------------------
+Mon Jan  1 00:00:00 2024        5.11 MB          5.11 MB
+Mon Apr 30 00:00:00 2024        7.03 MB          25.2 MB
+Thu Feb  1 00:00:00 2024        6.11 MB          11.2 MB
+Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
+          `;
+
+          mockStdout.emit('data', mockIncrements);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result.length).toEqual(4);
+          expect(result[0].time).toEqual('Mon Apr 30 00:00:00 2024');
+          expect(result[0].step).toEqual('0B');
+          expect(result[0].size).toEqual('7.03 MB');
+          expect(result[0].cum).toEqual('25.2 MB');
+
+          expect(result[1].time).toEqual('Fri Mar  1 00:00:00 2024');
+          expect(result[1].step).toEqual('1B');
+          expect(result[1].size).toEqual('6.95 MB');
+          expect(result[1].cum).toEqual('18.2 MB');
+
+          expect(result[2].time).toEqual('Thu Feb  1 00:00:00 2024');
+          expect(result[2].step).toEqual('2B');
+          expect(result[2].size).toEqual('6.11 MB');
+          expect(result[2].cum).toEqual('11.2 MB');
+
+          expect(result[3].time).toEqual('Mon Jan  1 00:00:00 2024');
+          expect(result[3].step).toEqual('3B');
+          expect(result[3].size).toEqual('5.11 MB');
+          expect(result[3].cum).toEqual('5.11 MB');
+        });
+      });
+
+      describe('listArchives', () => {
+        beforeEach(() => {
+          jest.spyOn(fs.promises, 'readdir').mockReturnValue(Promise.resolve(['2024-01-01.tar.gz', '2024-02-02.tar.gz']) as any);
+          jest.spyOn(fs.promises, 'stat').mockImplementation((file) => {
+            return Promise.resolve({
+              mtime: new Date(file.toString().split('/').slice(-1)[0].split('.')[0]),
+              size: 100
+            } as Stats)
+          });
+        });
+
+        test('should reject if the archive drectory cannot be read', async () => {
+          (fs.promises.readdir as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.listArchives()).rejects.toBeTruthy();
+        });
+
+        test('should reject if any archive file cannot be read', async () => {
+          (fs.promises.stat as jest.Mock).mockImplementation((path: any) => {
+            if (path.match('2024-02-02')) {
+              return Promise.reject('error');
+            }
+
+            return Promise.resolve({
+              mtime: new Date(path.toString().split('.')[0]),
+              size: 100
+            } as Stats)
+          });
+          await expect(() => inst.listArchives()).rejects.toBeTruthy();
+        });
+
+        test('should return archives sorted by modification time', async () => {
+          const result = await inst.listArchives();
+          expect(result.length).toEqual(2);
+
+          expect(result[0].time).toEqual(new Date('2024-02-02'));
+          expect(result[0].filename).toEqual('2024-02-02.tar.gz');
+
+          expect(result[1].time).toEqual(new Date('2024-01-01'));
+          expect(result[1].filename).toEqual('2024-01-01.tar.gz');
+        });
+      });
+
+      describe('prune', () => {
+        test('should reject if rdiff-backup has an error', async () => {
+          const promise = inst.prune(2);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('error', 'error');
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should reject if rdiff-backup returns an error status', async () => {
+          const promise = inst.prune(2);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the backups were pruned', async () => {
+          const promise = inst.prune(2);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith(
+            '/usr/bin/rdiff-backup',
+            ['--force', '--remove-older-than', '2', inst.env.bwd],
+            { cwd: inst.env.bwd }
+          );
+        });
+      });
+
+      describe('deleteArchive', () => {
+        test('should reject if there is an error deleting the file', async () => {
+          jest.spyOn(fs.promises, 'rm').mockReturnValue(Promise.reject('error'))
+          await expect(() => inst.deleteArchive('2024-01-01.tar.gz')).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the file is able to be deleted', async () => {
+          jest.spyOn(fs.promises, 'rm').mockReturnValue(Promise.resolve());
+          await inst.deleteArchive('2024-01-01.tar.gz');
+          expect(fs.promises.rm).toHaveBeenLastCalledWith('/path/archive/server1/2024-01-01.tar.gz');
+        });
+      });
     });
   });
 });

@@ -11,7 +11,6 @@ import procfs from 'procfs-stats';
 import { Rsync } from 'rsync2';
 import strftime from 'strftime';
 import { Tail } from 'tail';
-import tmp from 'tmp';
 import userid from 'userid';
 import which from 'which';
 
@@ -416,10 +415,10 @@ export class Instance {
             resolve();
           });
         });
-      }
-
-      return Promise.reject(`cannot create instance ${this.name} from archive with unsupported file type ${extension}`);
     }
+
+    return Promise.reject(`cannot create instance ${this.name} from archive with unsupported file type ${extension}`);
+  }
 
   /**
    * Delete the files for this instance
@@ -491,7 +490,7 @@ export class Instance {
       output: [
         (output) => {
           stdout.push(output);
-        }
+        },
       ],
     });
 
@@ -700,7 +699,7 @@ export class Instance {
       return Promise.reject(`instance ${this.name} does not exist`);
     }
 
-    if(!this.isUp()) {
+    if (!this.isUp()) {
       return;
     }
 
@@ -923,34 +922,31 @@ export class Instance {
     const binary = which.sync('rdiff-backup');
     const absFilepath = path.join(this.env.bwd, filename);
 
+    const dirName = await fs.promises.mkdtemp('rdiff-previous-version-');
+    const tmpFile = path.join(dirName, filename);
+
     return await new Promise((resolve, reject) => {
-      tmp.file((err, newFilepath) => {
-        if (err) {
-          return reject(err);
-        }
+      const args = ['--force', '--restore-as-of', `${increment}`, absFilepath, tmpFile];
+      const params = { cwd: this.env.bwd };
+      const proc = child.spawn(binary, args, params);
 
-        const args = ['--force', '--restore-as-of', `${increment}`, absFilepath, newFilepath];
-        const params = { cwd: this.env.bwd };
-        const proc = child.spawn(binary, args, params);
+      proc.on('error', (code) => {
+        reject(code);
+      });
 
-        proc.on('error', (code) => {
-          reject(code);
-        });
-
-        proc.on('exit', (code) => {
-          if (code === 0) {
-            fs.readFile(newFilepath, (inErr, data) => {
-              if (inErr) {
-                reject(inErr);
-                return;
-              }
-
+      proc.on('exit', (code) => {
+        if (code === 0) {
+          fs.promises
+            .readFile(tmpFile)
+            .then((data) => {
               resolve(data.toString());
+            })
+            .catch((error) => {
+              reject(error);
             });
-          } else {
-            reject(code);
-          }
-        });
+        } else {
+          reject(code);
+        }
       });
     });
   }
@@ -967,7 +963,7 @@ export class Instance {
 
     // Increment entry looks like:
     // increments.2024-08-12T00:15:00Z.dir   Mon Aug 12 00:15:00 2024
-    const regex = /^.+ +(\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})/;
+    const regex = /\s{3}(\w{3} \w{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4}$)/;
     const increments: IncrementListItem[] = [];
 
     return await new Promise((resolve, reject) => {
@@ -1038,7 +1034,7 @@ export class Instance {
           .reduce<RegExpMatchArray[]>((acc, line) => {
             const match = line.match(regex);
             if (!match) {
-              return [];
+              return acc;
             }
 
             acc.push(match);
@@ -1143,16 +1139,8 @@ export class Instance {
    * @param filename Archive file to delete
    */
   async deleteArchive(filename: string): Promise<void> {
-    const archiveFiles = path.join(this.env['awd'], filename);
-
-    return await new Promise((resolve, reject) => {
-      fs.remove(archiveFiles, (err) => {
-        if (err) {
-          reject(err);
-        }
-        resolve();
-      });
-    });
+    const archiveFile = path.join(this.env['awd'], filename);
+    return await fs.promises.rm(archiveFile);
   }
 
   /**
@@ -1161,111 +1149,112 @@ export class Instance {
    * @returns Owner and group information for this instance
    */
   async getOwner(): Promise<{ uid: number; gid: number; username: string; groupname: string }> {
-    return await fs.promises.stat(this.env.cwd).then((statData) => ({
+    const statData = await fs.promises.stat(this.env.cwd)
+    return {
       uid: statData.uid,
       gid: statData.gid,
       username: userid.username(statData.uid),
       groupname: userid.groupname(statData.gid),
-    }));
+    };
   }
 
-    /**
+  /**
    * Get the startup arguments for this instance
    *
    * @returns Arguments to pass to screen to start the server
    */
-    getStartArgs(): string[] {
-      const jar = (unconventional: boolean = false): string[] => {
-        const systemJava = which.sync('java');
-        const javaConfig = this.sc().java;
-        const javaArgs = {
-          binary: javaConfig?.java_binary || systemJava,
-          xmx: parseInt(javaConfig?.java_xmx) || 0,
-          xms: parseInt(javaConfig?.java_xms) || 0,
-          jarfile: javaConfig?.jarfile,
-          jar_args: javaConfig?.jar_args || '',
-          java_tweaks: javaConfig?.java_tweaks || null,
-        };
-
-        if (!javaArgs.binary) {
-          throw new Error('no java binary assigned for instance');
-        }
-
-        if (javaArgs.xmx <= 0) {
-          throw new Error('Xmx heapsize must be positive integer >= 0');
-        }
-
-        if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
-          throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
-        }
-
-        if (!javaArgs.jarfile) {
-          throw new Error('instance not assigned a runnable jar');
-        }
-
-        const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
-
-        if (javaArgs.xmx) {
-          screenArgs.push(`-Xmx${javaArgs.xmx}M`);
-        }
-        if (javaArgs.xms) {
-          screenArgs.push(`-Xms${javaArgs.xms}M`);
-        }
-
-        if (javaArgs.java_tweaks) {
-          screenArgs.push(...javaArgs.java_tweaks.split(' '));
-        }
-
-        screenArgs.push('-jar', javaArgs.jarfile);
-
-        screenArgs.push(...javaArgs.jar_args.split(' '));
-
-        if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
-          screenArgs.push('--installServer');
-        }
-
-        return screenArgs;
+  getStartArgs(): string[] {
+    const jar = (unconventional: boolean = false): string[] => {
+      const systemJava = which.sync('java');
+      const javaConfig = this.sc().java;
+      const javaArgs = {
+        binary: javaConfig?.java_binary || systemJava,
+        xmx: parseInt(javaConfig?.java_xmx) || 0,
+        xms: parseInt(javaConfig?.java_xms) || 0,
+        jarfile: javaConfig?.jarfile,
+        jar_args: javaConfig?.jar_args || '',
+        java_tweaks: javaConfig?.java_tweaks || null,
       };
 
-      const phar = (): string[] => {
-        let binary: string;
-
-        try {
-          const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
-          fs.accessSync(php7, constants.F_OK);
-          binary = './bin/php7/bin/php';
-        } catch (e) {
-          binary = './bin/php5/bin/php';
-        }
-
-        const pharFile = this.sc().java?.jarfile;
-        if (!pharFile) {
-          throw new Error('instance not assigned a runnable phar');
-        }
-
-        return ['-dmS', `mc-${this.name}`, binary, pharFile];
-      };
-
-      const cuberite = (): string[] => {
-        return ['-dmS', `mc-${this.name}`, './Cuberite'];
-      };
-
-      const sc = this.sc();
-      const jarfile = sc.java?.jarfile;
-      const unconventional = sc.minecraft?.unconventional;
-
-      if (!jarfile) {
-        throw new Error('Cannot start instance without a designated jar/phar');
-      } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
-        return jar(unconventional);
-      } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
-        return phar();
-      } else if (jarfile === 'Cuberite') {
-        return cuberite();
+      if (!javaArgs.binary) {
+        throw new Error('no java binary assigned for instance');
       }
 
-      throw new Error(`unknown jar type ${jarfile}`);
+      if (javaArgs.xmx <= 0) {
+        throw new Error('Xmx heapsize must be positive integer >= 0');
+      }
+
+      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
+        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
+      }
+
+      if (!javaArgs.jarfile) {
+        throw new Error('instance not assigned a runnable jar');
+      }
+
+      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
+
+      if (javaArgs.xmx) {
+        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
+      }
+      if (javaArgs.xms) {
+        screenArgs.push(`-Xms${javaArgs.xms}M`);
+      }
+
+      if (javaArgs.java_tweaks) {
+        screenArgs.push(...javaArgs.java_tweaks.split(' '));
+      }
+
+      screenArgs.push('-jar', javaArgs.jarfile);
+
+      screenArgs.push(...javaArgs.jar_args.split(' '));
+
+      if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
+        screenArgs.push('--installServer');
+      }
+
+      return screenArgs;
+    };
+
+    const phar = (): string[] => {
+      let binary: string;
+
+      try {
+        const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
+        fs.accessSync(php7, constants.F_OK);
+        binary = './bin/php7/bin/php';
+      } catch (e) {
+        binary = './bin/php5/bin/php';
+      }
+
+      const pharFile = this.sc().java?.jarfile;
+      if (!pharFile) {
+        throw new Error('instance not assigned a runnable phar');
+      }
+
+      return ['-dmS', `mc-${this.name}`, binary, pharFile];
+    };
+
+    const cuberite = (): string[] => {
+      return ['-dmS', `mc-${this.name}`, './Cuberite'];
+    };
+
+    const sc = this.sc();
+    const jarfile = sc.java?.jarfile;
+    const unconventional = sc.minecraft?.unconventional;
+
+    if (!jarfile) {
+      throw new Error('Cannot start instance without a designated jar/phar');
+    } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
+      return jar(unconventional);
+    } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
+      return phar();
+    } else if (jarfile === 'Cuberite') {
+      return cuberite();
     }
+
+    throw new Error(`unknown jar type ${jarfile}`);
+  }
 
   /**
    *
@@ -1378,7 +1367,10 @@ export class Instance {
    * @returns True if server.properties exists, false otherwise
    */
   async exists(): Promise<boolean> {
-    return await fs.promises.stat(this.env.sp).then((statData) => !!statData).catch(() => false);
+    return await fs.promises
+      .stat(this.env.sp)
+      .then((statData) => !!statData)
+      .catch(() => false);
   }
 
   /**
