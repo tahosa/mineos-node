@@ -776,7 +776,7 @@ describe('Instance', () => {
         jest.spyOn(inst, 'sp').mockReturnValue({ 'server-port': 25565 });
         jest.spyOn(inst, 'sc').mockReturnValue({
           java: { jarfile: 'minecraft_server.jar' },
-          minecraft: { profile: 'profile' }
+          minecraft: { profile: 'profile' },
         } as ServerConfig);
         jest.spyOn(inst, 'getOwner').mockReturnValue(
           Promise.resolve({
@@ -1112,7 +1112,7 @@ describe('Instance', () => {
               counter++;
               return { server1: { java: 1000 } } as any;
             }
-            counter ++;
+            counter++;
             return {};
           });
 
@@ -1128,7 +1128,7 @@ describe('Instance', () => {
           const promise = inst.stop();
           await new Promise(process.nextTick);
 
-          for(let i = 0; i < 150; i++) {
+          for (let i = 0; i < 150; i++) {
             await new Promise(process.nextTick);
             jest.advanceTimersByTime(200);
           }
@@ -1175,7 +1175,7 @@ describe('Instance', () => {
               counter++;
               return { server1: { java: 1000 } } as any;
             }
-            counter ++;
+            counter++;
             return {};
           });
 
@@ -1191,7 +1191,7 @@ describe('Instance', () => {
           const promise = inst.kill();
           await new Promise(process.nextTick);
 
-          for(let i = 0; i < 150; i++) {
+          for (let i = 0; i < 150; i++) {
             await new Promise(process.nextTick);
             jest.advanceTimersByTime(200);
           }
@@ -1319,7 +1319,9 @@ describe('Instance', () => {
         });
 
         test('should reject if the tail cannot be started', async () => {
-          Tail.mockImplementation(() => { throw new Error('error') });
+          Tail.mockImplementation(() => {
+            throw new Error('error');
+          });
           await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
@@ -1339,9 +1341,9 @@ describe('Instance', () => {
           const promise = inst.saveallLatestLog();
           await new Promise(process.nextTick);
 
-          mockTail.emit('line', '[INFO]: Saved the world')
+          mockTail.emit('line', '[INFO]: Saved the world');
 
-          jest.advanceTimersByTime(100);
+          jest.advanceTimersByTime(10000);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1349,6 +1351,168 @@ describe('Instance', () => {
           expect(mockTail.unwatch).toHaveBeenCalled();
         });
       });
+    });
+
+    describe('backup and archive functions', () => {
+      let inst: Instance;
+      let mockChildEmitter: EventEmitter;
+
+      beforeAll(() => {
+        jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
+      });
+
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        inst = new Instance('server1', '/path');
+        jest
+          .spyOn(inst, 'getOwner')
+          .mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000, username: 'user', groupname: 'group' }));
+        jest.spyOn(inst, 'stuff').mockImplementation((command) => Promise.resolve(command));
+        jest.spyOn(inst, 'saveallLatestLog').mockReturnValue(Promise.resolve());
+        jest.spyOn(inst, 'getAutosaveState').mockReturnValue(Promise.resolve(false));
+
+        mockChildEmitter = new EventEmitter();
+        jest.spyOn(mockChildEmitter, 'once');
+        (jest.spyOn(child, 'spawn') as jest.Mock).mockImplementation(() => {
+          return mockChildEmitter;
+        });
+      });
+
+      afterEach(() => {
+        jest.clearAllMocks();
+      });
+
+      describe('archive', () => {
+        test('should reject if the tar process fails', async () => {
+          const promise = inst.archive();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(async () => promise).rejects.toBeTruthy();
+        });
+
+        test('should attempt to force a save', async () => {
+          const promise = inst.archive(true);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(inst.stuff).toHaveBeenCalledTimes(1);
+          expect(inst.stuff).toHaveBeenCalledWith('save-off');
+          expect(inst.saveallLatestLog).toHaveBeenCalled();
+          expect(child.spawn).toHaveBeenLastCalledWith(
+            '/usr/bin/tar',
+            [
+              'czf',
+              expect.stringMatching(/^\/path\/archive\/server1\/server-server1_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}.tgz$/),
+              '.',
+            ],
+            { cwd: '/path/servers/server1', uid: 1000, gid: 1000 }
+          );
+        });
+
+        test('should not fail if the forced save fails', async () => {
+          (inst.saveallLatestLog as jest.Mock).mockReturnValue(Promise.reject('error'));
+          const promise = inst.archive(true);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(inst.stuff).toHaveBeenCalledTimes(1);
+          expect(inst.stuff).toHaveBeenCalledWith('save-off');
+          expect(inst.saveallLatestLog).toHaveBeenCalled();
+        });
+
+        test('should re-enable saving if it was on before archiving', async () => {
+          (inst.getAutosaveState as jest.Mock).mockReturnValue(Promise.resolve(true));
+          const promise = inst.archive(true);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(inst.stuff).toHaveBeenCalledTimes(2);
+          expect(inst.stuff).toHaveBeenCalledWith('save-off');
+          expect(inst.stuff).toHaveBeenCalledWith('save-on');
+          expect(inst.saveallLatestLog).toHaveBeenCalled();
+        });
+      });
+
+      describe('backup', () => {
+        test('should reject if the rdiff process returns an error', async () => {
+          const promise = inst.backup();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the backup runs successfully', async () => {
+          const promise = inst.backup();
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith(
+            '/usr/bin/rdiff-backup',
+            ['--exclude', '/path/servers/server1/dynmap', '/path/servers/server1/', '/path/backup/server1'],
+            { cwd: '/path/backup/server1', uid: 1000, gid: 1000 }
+          );
+        });
+      });
+
+      describe('restore', () => {
+        test('should reject if the rdiff process returns an error', async () => {
+          const promise = inst.restore(10);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should resolve if the restore runs successfully', async () => {
+          const promise = inst.restore(10);
+          await new Promise(process.nextTick);
+
+          mockChildEmitter.emit('exit', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenCalledWith(
+            '/usr/bin/rdiff-backup',
+            ['--restore-as-of', '10', '--force', '/path/backup/server1', '/path/servers/server1'],
+            { cwd: '/path/backup/server1' }
+          );
+        });
+      });
+
+      describe('previousVersions', () => {});
+
+      describe('listIncrements', () => {});
+
+      describe('listIncrementSizes', () => {});
+
+      describe('listArchives', () => {});
+
+      describe('prune', () => {});
+
+      describe('deleteArchive', () => {});
     });
   });
 });

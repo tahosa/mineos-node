@@ -864,7 +864,7 @@ export class Instance {
         }
 
         if (code) {
-          reject(code);
+          return reject(code);
         }
         resolve();
       });
@@ -884,7 +884,7 @@ export class Instance {
       const proc = child.spawn(binary, args, params);
       proc.once('exit', (code) => {
         if (code) {
-          reject(code);
+          return reject(code);
         }
         resolve();
       });
@@ -905,7 +905,7 @@ export class Instance {
       const proc = child.spawn(binary, args, params);
       proc.once('exit', (code) => {
         if (code) {
-          reject(code);
+          return reject(code);
         }
         resolve();
       });
@@ -926,7 +926,7 @@ export class Instance {
     return await new Promise((resolve, reject) => {
       tmp.file((err, newFilepath) => {
         if (err) {
-          reject(err);
+          return reject(err);
         }
 
         const args = ['--force', '--restore-as-of', `${increment}`, absFilepath, newFilepath];
