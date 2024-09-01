@@ -157,8 +157,21 @@ describe('Instance', () => {
   });
 
   describe('instance', () => {
+    let inst: Instance;
+
+    afterAll(() => {
+      jest.restoreAllMocks();
+    });
+
+    beforeEach(() => {
+      inst = new Instance('server1', '/path');
+    });
+
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+
     test('constructor should set properties', () => {
-      const inst = new Instance('server1', '/path');
       expect(inst.name).toEqual('server1');
       expect(inst.env.baseDir).toEqual('/path');
       expect(inst.env.cwd).toEqual('/path/servers/server1');
@@ -179,23 +192,13 @@ describe('Instance', () => {
         jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       beforeEach(() => {
         (readIni as jest.Mock).mockImplementation(() => {
           return mockProps;
         });
       });
 
-      afterEach(() => {
-        jest.clearAllMocks();
-      });
-
       test('should read server properties and cache result', () => {
-        const inst = new Instance('server1', '/path');
-
         const spInit = inst.sp();
         expect(spInit).toEqual(mockProps);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -210,14 +213,12 @@ describe('Instance', () => {
         (readIni as jest.Mock).mockImplementation(() => {
           return null;
         });
-        const inst = new Instance('server1', '/path');
 
         const spInit = inst.sp();
         expect(spInit).toEqual({});
       });
 
       test('should modify single property and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
         const newSp = { server: 'newValue' };
 
         const spInit = inst.modifySp('server', 'newValue');
@@ -236,7 +237,6 @@ describe('Instance', () => {
       });
 
       test('should overlay multiple values and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
         const newSp = {
           server: 'newValue',
           otherProp: 'anotherValue',
@@ -269,23 +269,13 @@ describe('Instance', () => {
         jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
-      afterAll(() => {
-        jest.restoreAllMocks;
-      });
-
       beforeEach(() => {
         (readIni as jest.Mock).mockImplementation(() => {
           return mockConfig;
         });
       });
 
-      afterEach(() => {
-        jest.clearAllMocks();
-      });
-
       test('should read server config and cache result', () => {
-        const inst = new Instance('server1', '/path');
-
         const scInit = inst.sc();
         expect(scInit).toEqual(mockConfig);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -300,14 +290,12 @@ describe('Instance', () => {
         (readIni as jest.Mock).mockImplementation(() => {
           return null;
         });
-        const inst = new Instance('server1', '/path');
 
         const scInit = inst.sc();
         expect(scInit).toEqual({});
       });
 
       test('should modify single property and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
         const newSc = { java: { jarfile: 'newValue' } };
 
         const scInit = inst.modifySc('java', 'jarfile', 'newValue');
@@ -330,10 +318,6 @@ describe('Instance', () => {
         jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
       });
 
-      afterAll(() => {
-        jest.restoreAllMocks;
-      });
-
       beforeEach(() => {
         mockCron = {
           job1: {
@@ -348,13 +332,7 @@ describe('Instance', () => {
         });
       });
 
-      afterEach(() => {
-        jest.clearAllMocks();
-      });
-
       test('should read cron config and cache result', () => {
-        const inst = new Instance('server1', '/path');
-
         const ccInit = inst.crons();
         expect(ccInit).toEqual(mockCron);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -369,14 +347,12 @@ describe('Instance', () => {
         (readIni as jest.Mock).mockImplementation(() => {
           return null;
         });
-        const inst = new Instance('server1', '/path');
 
         const ccInit = inst.crons();
         expect(ccInit).toEqual({});
       });
 
       test('should add a new cron task and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
         const newJob = {
           command: 'archive',
           source: '0 0 * * *',
@@ -400,8 +376,6 @@ describe('Instance', () => {
       });
 
       test('should delete the cron task and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
-
         const ccInit = inst.deleteCron('job1');
         expect(ccInit).toEqual({});
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -415,8 +389,6 @@ describe('Instance', () => {
       });
 
       test('should set the enabled property of the cron task and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
-
         const ccInit = inst.setCron('job1', false);
         expect(ccInit).toEqual({ job1: { ...mockCron.job1, enabled: false } });
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -433,8 +405,6 @@ describe('Instance', () => {
       });
 
       test('should not make any changes if the cron hash does not exist', () => {
-        const inst = new Instance('server1', '/path');
-
         const ccInit = inst.setCron('fake', false);
         expect(ccInit).toEqual(mockCron);
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -443,8 +413,6 @@ describe('Instance', () => {
       });
 
       test('should set the enabled property of the cron task and invalidate the cache', () => {
-        const inst = new Instance('server1', '/path');
-
         const ccInit = inst.setCron('job1', false);
         expect(ccInit).toEqual({ job1: { ...mockCron.job1, enabled: false } });
         expect(readIni).toHaveBeenCalledTimes(1);
@@ -479,40 +447,25 @@ describe('Instance', () => {
         });
       });
 
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       beforeEach(() => {
-        jest.spyOn(fsExtra.promises, 'stat').mockImplementation(() => {
-          return Promise.reject();
-        });
-        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
         (jest.spyOn(fsExtra.promises, 'readdir') as jest.Mock).mockReturnValue(Promise.resolve(['/path/archive']));
+        jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(false));
+        jest.spyOn(inst, 'isUp').mockReturnValue(false);
       });
 
-      afterEach(() => {
-        jest.clearAllMocks();
-        (fsExtra.promises.stat as jest.Mock).mockReset();
-        (Instance.listRunningInstancePids as jest.Mock).mockReset();
-      });
 
       test('should not create a server which already exists', async () => {
-        (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.resolve({}));
-
-        const inst = new Instance('server1', '/path');
+        (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(true));
         expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
       });
 
       // This is an edge case if the files are manually deleted but the instance is not stopped first
       test('should not create a server which matches a running instance name', async () => {
-        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
-        const inst = new Instance('server1', '/path');
+        (inst.isUp as jest.Mock).mockReturnValue(true);
         expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
       });
 
       test('should create a regular minecraft server', async () => {
-        const inst = new Instance('server1', '/path');
         await inst.create({ uid: 1000, gid: 1000 });
 
         expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
@@ -522,7 +475,6 @@ describe('Instance', () => {
       });
 
       test('should create an unconventional minecraft server,', async () => {
-        const inst = new Instance('server1', '/path');
         await inst.create({ uid: 1000, gid: 1000 }, true);
 
         expect(fsExtra.ensureDirSync).toHaveBeenCalledTimes(3);
@@ -532,7 +484,6 @@ describe('Instance', () => {
       });
 
       test('should reject creation from archive if file extension is not supported', async () => {
-        const inst = new Instance('server1', '/path');
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.yml');
         expect(async () => {
           await promise;
@@ -540,7 +491,6 @@ describe('Instance', () => {
       });
 
       test('should reject creation from archive if tar returns an error', async () => {
-        const inst = new Instance('server1', '/path');
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tgz');
 
         await new Promise<void>((resolve) => {
@@ -555,7 +505,6 @@ describe('Instance', () => {
       });
 
       test('should create an archive from a tar file at an absolute path', async () => {
-        const inst = new Instance('server1', '/path');
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar');
         await new Promise<void>((resolve) => {
           setTimeout(() => {
@@ -579,7 +528,6 @@ describe('Instance', () => {
       });
 
       test('should create an archive from a tar.gz file in the import directory', async () => {
-        const inst = new Instance('server1', '/path');
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz');
         await new Promise<void>((resolve) => {
           setTimeout(() => {
@@ -604,39 +552,26 @@ describe('Instance', () => {
     });
 
     describe('delete', () => {
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       beforeEach(() => {
-        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-          return Promise.resolve({});
-        });
-        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
-      });
-
-      afterEach(() => {
-        jest.clearAllMocks();
-        (fsExtra.promises.stat as jest.Mock).mockReset();
-        (Instance.listRunningInstancePids as jest.Mock).mockReset();
+        jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+        jest.spyOn(inst, 'isUp').mockReturnValue(false);
       });
 
       test('should not delete a server which does not exist', async () => {
-        (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.reject());
-        const inst = new Instance('server1', '/path');
+        (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
+
         expect(async () => inst.delete()).rejects.toBeTruthy();
       });
 
       test('should not delete a server which matches a running instance name', async () => {
-        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
-        const inst = new Instance('server1', '/path');
+        (inst.isUp as jest.Mock).mockReturnValue(true);
+
         expect(async () => inst.delete()).rejects.toBeTruthy();
       });
 
       test('should force remove all directories', async () => {
         jest.spyOn(fs.promises, 'rm').mockImplementation(async () => {});
 
-        const inst = new Instance('server1', '/path');
         await inst.delete();
 
         const rmOptions = { recursive: true, force: true };
@@ -650,40 +585,23 @@ describe('Instance', () => {
     });
 
     describe('profile', () => {
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       describe('copyProfile', () => {
         beforeEach(() => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.resolve({});
-          });
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
-        });
-
-        afterEach(() => {
-          jest.clearAllMocks();
-          (fsExtra.promises.stat as jest.Mock).mockReset();
-          (Instance.listRunningInstancePids as jest.Mock).mockReset();
+          jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+          jest.spyOn(inst, 'isUp').mockReturnValue(false);
         });
 
         test('should reject if the instance does not exist', async () => {
-          (fsExtra.promises.stat as jest.Mock).mockReturnValue(Promise.reject());
-
-          const inst = new Instance('server1', '/path');
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is running', async () => {
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 123 } });
-
-          const inst = new Instance('server1', '/path');
+          (inst.isUp as jest.Mock).mockReturnValue(true);
           await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
         });
 
         test('should reject if a profile is not set', async () => {
-          const inst = new Instance('server1', '/path');
           jest.spyOn(inst, 'sc').mockReturnValue({} as ServerConfig);
           await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
         });
@@ -694,7 +612,6 @@ describe('Instance', () => {
             execute: jest.fn().mockReturnValue(Promise.resolve(0)),
           };
           jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
-          const inst = new Instance('server1', '/path');
 
           jest.spyOn(inst, 'sc').mockReturnValue({ minecraft: { profile: 'vanilla_1.20' } } as ServerConfig);
           jest
@@ -729,7 +646,6 @@ describe('Instance', () => {
           };
           jest.spyOn(Rsync, 'build').mockReturnValue(mockRsync);
 
-          const inst = new Instance('server1', '/path');
           await expect(() => inst.profileDelta('vanilla_1.20')).rejects.toEqual(1);
         });
 
@@ -751,7 +667,6 @@ describe('Instance', () => {
             return mockRsync;
           });
 
-          const inst = new Instance('server1', '/path');
           const result = await inst.profileDelta('vanilla_1.20');
           expect(result).toEqual(['file.txt', 'multiline.md', 'nextline.toml']);
           expect(Rsync.build).toHaveBeenCalledTimes(1);
@@ -767,21 +682,14 @@ describe('Instance', () => {
     });
 
     describe('minecraft server instance interactions', () => {
-      let inst: Instance;
       let mockSocket;
-
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
 
       beforeEach(() => {
         jest.spyOn(which, 'sync').mockReturnValue('/usr/bin/screen');
         jest.spyOn(child, 'execFileSync').mockReturnValue(Buffer.from('result'));
-        (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-          return Promise.resolve({});
-        });
-        jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
-        inst = new Instance('server1', '/path');
+
+        jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+        jest.spyOn(inst, 'isUp').mockReturnValue(true);
         jest.spyOn(inst, 'sp').mockReturnValue({ 'server-port': 25565 });
         jest.spyOn(inst, 'sc').mockReturnValue({
           java: { jarfile: 'minecraft_server.jar' },
@@ -824,17 +732,14 @@ describe('Instance', () => {
         });
 
         test('should reject if the instance is not running', async () => {
-          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          (inst.isUp as jest.Mock).mockReturnValue(false);
           await expect(async () => inst.ping()).rejects.toBeTruthy();
         });
 
         test('should reject if there is an error on the socket', async () => {
-          const promise = inst.ping().catch((err) => {
-            expect(err).toEqual('error');
-          });
-
+          const promise = inst.ping();
           mockSocket.emit('error', 'error');
-          await promise;
+          await expect(() => promise).rejects.toBeTruthy();
         });
 
         test('should return data for legacy minecraft servers', async () => {
@@ -924,14 +829,12 @@ describe('Instance', () => {
 
       describe('stuff', () => {
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
-          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          (inst.isUp as jest.Mock).mockReturnValue(false);
           await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
         });
 
@@ -964,21 +867,19 @@ describe('Instance', () => {
         });
 
         beforeEach(() => {
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+          jest.spyOn(inst, 'isUp').mockReturnValue(false);
           mockChild = new EventEmitter();
           jest.spyOn(mockChild, 'once');
           (jest.spyOn(child, 'spawn') as jest.Mock).mockReturnValue(mockChild);
         });
 
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.start()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is already running', async () => {
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
+          (inst.isUp as jest.Mock).mockReturnValue(true);
           await expect(async () => inst.start()).rejects.toBeTruthy();
         });
 
@@ -1098,31 +999,28 @@ describe('Instance', () => {
         });
 
         beforeEach(() => {
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
           jest.spyOn(inst, 'stuff').mockImplementation((command) => Promise.resolve(command));
         });
 
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.stop()).rejects.toBeTruthy();
         });
 
         test('should resolve if the instance is not running', async () => {
-          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({});
+          (inst.isUp as jest.Mock).mockReturnValue(false);
           await inst.stop();
         });
 
         test('should resolve if the instance exits within the iteration counter', async () => {
           let counter = 0;
-          jest.spyOn(Instance, 'listRunningInstancePids').mockImplementation(() => {
+          jest.spyOn(inst, 'isUp').mockImplementation(() => {
             if (counter === 0) {
               counter++;
-              return { server1: { java: 1000 } } as any;
+              return true;
             }
             counter++;
-            return {};
+            return false;
           });
 
           const promise = inst.stop();
@@ -1134,6 +1032,7 @@ describe('Instance', () => {
         });
 
         test('should reject if the instance does not stop within the iteration counter', async () => {
+          (inst.isUp as jest.Mock).mockReturnValue(true)
           const promise = inst.stop();
           await new Promise(process.nextTick);
 
@@ -1156,14 +1055,13 @@ describe('Instance', () => {
         });
 
         beforeEach(() => {
+          // This function uses more than just the isUp() check, so this suite needs to mock the underlying feature
           jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
           jest.spyOn(process, 'kill').mockImplementation(() => true);
         });
 
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.kill()).rejects.toBeTruthy();
         });
 
@@ -1269,14 +1167,12 @@ describe('Instance', () => {
         });
 
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.saveall()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
-          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          (inst.isUp as jest.Mock).mockReturnValue(false);
           await expect(async () => inst.saveall()).rejects.toBeTruthy();
         });
 
@@ -1316,14 +1212,12 @@ describe('Instance', () => {
         });
 
         test('should reject if the instance does not exist', async () => {
-          (jest.spyOn(fsExtra.promises, 'stat') as jest.Mock).mockImplementation(() => {
-            return Promise.reject();
-          });
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
           await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
-          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          (inst.isUp as jest.Mock).mockReturnValue(false);
           await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
@@ -1363,19 +1257,13 @@ describe('Instance', () => {
     });
 
     describe('backup and archive functions', () => {
-      let inst: Instance;
       let mockChildEmitter: EventEmitter;
 
       beforeAll(() => {
         jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
       });
 
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       beforeEach(() => {
-        inst = new Instance('server1', '/path');
         jest
           .spyOn(inst, 'getOwner')
           .mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000, username: 'user', groupname: 'group' }));
@@ -1388,10 +1276,6 @@ describe('Instance', () => {
         (jest.spyOn(child, 'spawn') as jest.Mock).mockImplementation(() => {
           return mockChildEmitter;
         });
-      });
-
-      afterEach(() => {
-        jest.clearAllMocks();
       });
 
       describe('archive', () => {
@@ -1800,10 +1684,6 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
     });
 
     describe('filesystem ownership and permissions', () => {
-      afterAll(() => {
-        jest.restoreAllMocks();
-      });
-
       beforeEach(() => {
         jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
         jest.spyOn(userid, 'username').mockReturnValue('username');
@@ -1817,12 +1697,11 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
       describe('getOwner', () => {
         test('should reject if stat has an error', async () => {
           (fs.promises.stat as jest.Mock).mockReturnValue(Promise.reject('error'));
-          const inst = new Instance('server1', '/path');
+
           await expect(() => inst.getOwner()).rejects.toBeTruthy();
         });
 
         test('should look up the uid and gid', async () => {
-          const inst = new Instance('server1', '/path');
           const result = await inst.getOwner();
           expect(result.uid).toEqual(1000);
           expect(result.username).toEqual('username');
@@ -1832,13 +1711,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
       });
 
       describe('chown', () => {
-        let inst: Instance;
-        afterAll(() => {
-          jest.restoreAllMocks();
-        });
-
         beforeEach(() => {
-          inst = new Instance('server1', '/path');
           (existsOnSystem as jest.Mock).mockReturnValue(Promise.resolve([true, true]));
           jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
           (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {
@@ -1882,13 +1755,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
       });
 
       describe('fixOwnership', () => {
-        let inst: Instance;
-        afterAll(() => {
-          jest.restoreAllMocks();
-        });
-
         beforeEach(() => {
-          inst = new Instance('server1', '/path');
           jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
           (jest.spyOn(fsExtra, 'ensureDir') as jest.Mock).mockReturnValue(Promise.resolve());
           (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {

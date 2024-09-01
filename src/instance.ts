@@ -530,11 +530,8 @@ export class Instance {
     const jarfile = this.sc().java?.jarfile;
     if (jarfile && jarfile.slice(-5).toLowerCase() === '.phar') {
       return Promise.reject('cannot ping instances using .phar executables');
-    } else {
-      const pids = Instance.listRunningInstancePids();
-      if (!(this.name in pids)) {
-        return Promise.reject('instance not running');
-      }
+    } else if (!this.isUp()) {
+      return Promise.reject('instance not running');
     }
 
     /**
@@ -706,7 +703,7 @@ export class Instance {
     await this.stuff('stop');
     while (iterations < MAX_ITERATIONS_TO_QUIT) {
       const running = await new Promise((resolve) => {
-        setTimeout(() => resolve(this.name in Instance.listRunningInstancePids()), interval);
+        setTimeout(() => resolve(this.isUp()), interval);
       });
 
       if (!running) {
