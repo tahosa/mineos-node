@@ -6,7 +6,11 @@ import fs, { type Stats } from 'node:fs';
 import net from 'node:net';
 import ini from 'ini';
 import { Rsync } from 'rsync2';
+import userid from 'userid';
 import which from 'which';
+
+import chownr from 'chownr';
+jest.mock('chownr');
 
 import mcquery from 'mcquery';
 jest.mock('mcquery');
@@ -37,6 +41,11 @@ jest.mock('./lib/util', () => ({
   readIni: jest.fn(),
   splitBuffer: (jest.requireActual('./lib/util') as any).splitBuffer,
   bufferToAscii: (jest.requireActual('./lib/util') as any).bufferToAscii,
+}));
+
+import { existsOnSystem } from './auth-new';
+jest.mock('./auth-new', () => ({
+  existsOnSystem: jest.fn(),
 }));
 
 import { Instance } from './instance';
@@ -1697,12 +1706,14 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
 
       describe('listArchives', () => {
         beforeEach(() => {
-          jest.spyOn(fs.promises, 'readdir').mockReturnValue(Promise.resolve(['2024-01-01.tar.gz', '2024-02-02.tar.gz']) as any);
+          jest
+            .spyOn(fs.promises, 'readdir')
+            .mockReturnValue(Promise.resolve(['2024-01-01.tar.gz', '2024-02-02.tar.gz']) as any);
           jest.spyOn(fs.promises, 'stat').mockImplementation((file) => {
             return Promise.resolve({
               mtime: new Date(file.toString().split('/').slice(-1)[0].split('.')[0]),
-              size: 100
-            } as Stats)
+              size: 100,
+            } as Stats);
           });
         });
 
@@ -1719,8 +1730,8 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
 
             return Promise.resolve({
               mtime: new Date(path.toString().split('.')[0]),
-              size: 100
-            } as Stats)
+              size: 100,
+            } as Stats);
           });
           await expect(() => inst.listArchives()).rejects.toBeTruthy();
         });
@@ -1776,7 +1787,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
 
       describe('deleteArchive', () => {
         test('should reject if there is an error deleting the file', async () => {
-          jest.spyOn(fs.promises, 'rm').mockReturnValue(Promise.reject('error'))
+          jest.spyOn(fs.promises, 'rm').mockReturnValue(Promise.reject('error'));
           await expect(() => inst.deleteArchive('2024-01-01.tar.gz')).rejects.toBeTruthy();
         });
 
@@ -1784,6 +1795,134 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           jest.spyOn(fs.promises, 'rm').mockReturnValue(Promise.resolve());
           await inst.deleteArchive('2024-01-01.tar.gz');
           expect(fs.promises.rm).toHaveBeenLastCalledWith('/path/archive/server1/2024-01-01.tar.gz');
+        });
+      });
+    });
+
+    describe('filesystem ownership and permissions', () => {
+      afterAll(() => {
+        jest.restoreAllMocks();
+      });
+
+      beforeEach(() => {
+        jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
+        jest.spyOn(userid, 'username').mockReturnValue('username');
+        jest.spyOn(userid, 'groupname').mockReturnValue('groupname');
+      });
+
+      afterEach(() => {
+        jest.resetAllMocks();
+      });
+
+      describe('getOwner', () => {
+        test('should reject if stat has an error', async () => {
+          (fs.promises.stat as jest.Mock).mockReturnValue(Promise.reject('error'));
+          const inst = new Instance('server1', '/path');
+          await expect(() => inst.getOwner()).rejects.toBeTruthy();
+        });
+
+        test('should look up the uid and gid', async () => {
+          const inst = new Instance('server1', '/path');
+          const result = await inst.getOwner();
+          expect(result.uid).toEqual(1000);
+          expect(result.username).toEqual('username');
+          expect(result.gid).toEqual(1000);
+          expect(result.groupname).toEqual('groupname');
+        });
+      });
+
+      describe('chown', () => {
+        let inst: Instance;
+        afterAll(() => {
+          jest.restoreAllMocks();
+        });
+
+        beforeEach(() => {
+          inst = new Instance('server1', '/path');
+          (existsOnSystem as jest.Mock).mockReturnValue(Promise.resolve([true, true]));
+          jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+          (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {
+            cb();
+          });
+        });
+
+        afterEach(() => {
+          jest.resetAllMocks();
+        });
+
+        test('should reject if the uid does not exist', async () => {
+          (existsOnSystem as jest.Mock).mockReturnValue(Promise.resolve([false, true]));
+          await expect(() => inst.chown(1000, 1000)).rejects.toBeTruthy();
+        });
+
+        test('should reject if the gid does not exist', async () => {
+          (existsOnSystem as jest.Mock).mockReturnValue(Promise.resolve([true, false]));
+          await expect(() => inst.chown(1000, 1000)).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(false));
+          await expect(() => inst.chown(1000, 1000)).rejects.toBeTruthy();
+        });
+
+        test('should reject if chownr has an error', async () => {
+          (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {
+            cb(new Error('error'));
+          });
+          await expect(() => inst.chown(1000, 1000)).rejects.toBeTruthy();
+        });
+
+        test('should resolve if chownr is successful', async () => {
+          await inst.chown(1000, 1000);
+          expect(chownr).toHaveBeenCalledTimes(3);
+          expect(chownr).toHaveBeenCalledWith(inst.env.cwd, 1000, 1000, expect.anything());
+          expect(chownr).toHaveBeenCalledWith(inst.env.bwd, 1000, 1000, expect.anything());
+          expect(chownr).toHaveBeenCalledWith(inst.env.awd, 1000, 1000, expect.anything());
+        });
+      });
+
+      describe('fixOwnership', () => {
+        let inst: Instance;
+        afterAll(() => {
+          jest.restoreAllMocks();
+        });
+
+        beforeEach(() => {
+          inst = new Instance('server1', '/path');
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
+          (jest.spyOn(fsExtra, 'ensureDir') as jest.Mock).mockReturnValue(Promise.resolve());
+          (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {
+            cb();
+          });
+        });
+
+        afterEach(() => {
+          jest.resetAllMocks();
+        });
+
+        test('should reject if stat fails', async () => {
+          (fs.promises.stat as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.fixOwnership()).rejects.toBeTruthy();
+        });
+
+        test('should reject if ensureDir fails', async () => {
+          (fsExtra.ensureDir as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.fixOwnership()).rejects.toBeTruthy();
+        });
+
+        test('should reject if chownr has an error', async () => {
+          (chownr as jest.Mock).mockImplementation((path, uid, gid, cb: any) => {
+            cb(new Error('error'));
+          });
+          await expect(() => inst.fixOwnership()).rejects.toBeTruthy();
+        });
+
+        test('should resolve if chownr is successful', async () => {
+          await inst.fixOwnership();
+          expect(chownr).toHaveBeenCalledTimes(3);
+          expect(chownr).toHaveBeenCalledWith(inst.env.cwd, 1000, 1000, expect.anything());
+          expect(chownr).toHaveBeenCalledWith(inst.env.bwd, 1000, 1000, expect.anything());
+          expect(chownr).toHaveBeenCalledWith(inst.env.awd, 1000, 1000, expect.anything());
         });
       });
     });

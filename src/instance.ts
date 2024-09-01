@@ -1159,104 +1159,6 @@ export class Instance {
   }
 
   /**
-   * Get the startup arguments for this instance
-   *
-   * @returns Arguments to pass to screen to start the server
-   */
-  getStartArgs(): string[] {
-    const jar = (unconventional: boolean = false): string[] => {
-      const systemJava = which.sync('java');
-      const javaConfig = this.sc().java;
-      const javaArgs = {
-        binary: javaConfig?.java_binary || systemJava,
-        xmx: parseInt(javaConfig?.java_xmx) || 0,
-        xms: parseInt(javaConfig?.java_xms) || 0,
-        jarfile: javaConfig?.jarfile,
-        jar_args: javaConfig?.jar_args || '',
-        java_tweaks: javaConfig?.java_tweaks || null,
-      };
-
-      if (!javaArgs.binary) {
-        throw new Error('no java binary assigned for instance');
-      }
-
-      if (javaArgs.xmx <= 0) {
-        throw new Error('Xmx heapsize must be positive integer >= 0');
-      }
-
-      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
-        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
-      }
-
-      if (!javaArgs.jarfile) {
-        throw new Error('instance not assigned a runnable jar');
-      }
-
-      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
-
-      if (javaArgs.xmx) {
-        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
-      }
-      if (javaArgs.xms) {
-        screenArgs.push(`-Xms${javaArgs.xms}M`);
-      }
-
-      if (javaArgs.java_tweaks) {
-        screenArgs.push(...javaArgs.java_tweaks.split(' '));
-      }
-
-      screenArgs.push('-jar', javaArgs.jarfile);
-
-      screenArgs.push(...javaArgs.jar_args.split(' '));
-
-      if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
-        screenArgs.push('--installServer');
-      }
-
-      return screenArgs;
-    };
-
-    const phar = (): string[] => {
-      let binary: string;
-
-      try {
-        const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
-        fs.accessSync(php7, constants.F_OK);
-        binary = './bin/php7/bin/php';
-      } catch (e) {
-        binary = './bin/php5/bin/php';
-      }
-
-      const pharFile = this.sc().java?.jarfile;
-      if (!pharFile) {
-        throw new Error('instance not assigned a runnable phar');
-      }
-
-      return ['-dmS', `mc-${this.name}`, binary, pharFile];
-    };
-
-    const cuberite = (): string[] => {
-      return ['-dmS', `mc-${this.name}`, './Cuberite'];
-    };
-
-    const sc = this.sc();
-    const jarfile = sc.java?.jarfile;
-    const unconventional = sc.minecraft?.unconventional;
-
-    if (!jarfile) {
-      throw new Error('Cannot start instance without a designated jar/phar');
-    } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
-      return jar(unconventional);
-    } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
-      return phar();
-    } else if (jarfile === 'Cuberite') {
-      return cuberite();
-    }
-
-    throw new Error(`unknown jar type ${jarfile}`);
-  }
-
-  /**
    *
    * @param uid
    * @param gid
@@ -1275,8 +1177,7 @@ export class Instance {
           new Promise<void>((resolve, reject) => {
             chownr(path, uid, gid, (err) => {
               if (err) {
-                reject(err);
-                return;
+                return reject(err);
               }
               resolve();
             });
@@ -1380,6 +1281,105 @@ export class Instance {
    */
   isUp(): boolean {
     return this.name in Instance.listRunningInstancePids();
+  }
+
+
+  /**
+   * Get the startup arguments for this instance
+   *
+   * @returns Arguments to pass to screen to start the server
+   */
+  getStartArgs(): string[] {
+    const jar = (unconventional: boolean = false): string[] => {
+      const systemJava = which.sync('java');
+      const javaConfig = this.sc().java;
+      const javaArgs = {
+        binary: javaConfig?.java_binary || systemJava,
+        xmx: parseInt(javaConfig?.java_xmx) || 0,
+        xms: parseInt(javaConfig?.java_xms) || 0,
+        jarfile: javaConfig?.jarfile,
+        jar_args: javaConfig?.jar_args || '',
+        java_tweaks: javaConfig?.java_tweaks || null,
+      };
+
+      if (!javaArgs.binary) {
+        throw new Error('no java binary assigned for instance');
+      }
+
+      if (javaArgs.xmx <= 0) {
+        throw new Error('Xmx heapsize must be positive integer >= 0');
+      }
+
+      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
+        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
+      }
+
+      if (!javaArgs.jarfile) {
+        throw new Error('instance not assigned a runnable jar');
+      }
+
+      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
+
+      if (javaArgs.xmx) {
+        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
+      }
+      if (javaArgs.xms) {
+        screenArgs.push(`-Xms${javaArgs.xms}M`);
+      }
+
+      if (javaArgs.java_tweaks) {
+        screenArgs.push(...javaArgs.java_tweaks.split(' '));
+      }
+
+      screenArgs.push('-jar', javaArgs.jarfile);
+
+      screenArgs.push(...javaArgs.jar_args.split(' '));
+
+      if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
+        screenArgs.push('--installServer');
+      }
+
+      return screenArgs;
+    };
+
+    const phar = (): string[] => {
+      let binary: string;
+
+      try {
+        const php7 = path.join(this.env.cwd, '/bin/php7/bin/php');
+        fs.accessSync(php7, constants.F_OK);
+        binary = './bin/php7/bin/php';
+      } catch (e) {
+        binary = './bin/php5/bin/php';
+      }
+
+      const pharFile = this.sc().java?.jarfile;
+      if (!pharFile) {
+        throw new Error('instance not assigned a runnable phar');
+      }
+
+      return ['-dmS', `mc-${this.name}`, binary, pharFile];
+    };
+
+    const cuberite = (): string[] => {
+      return ['-dmS', `mc-${this.name}`, './Cuberite'];
+    };
+
+    const sc = this.sc();
+    const jarfile = sc.java?.jarfile;
+    const unconventional = sc.minecraft?.unconventional;
+
+    if (!jarfile) {
+      throw new Error('Cannot start instance without a designated jar/phar');
+    } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
+      return jar(unconventional);
+    } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
+      return phar();
+    } else if (jarfile === 'Cuberite') {
+      return cuberite();
+    }
+
+    throw new Error(`unknown jar type ${jarfile}`);
   }
 
   /**
