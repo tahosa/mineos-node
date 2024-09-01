@@ -138,7 +138,9 @@ export class PromisePool<T, I> {
       try {
         for (const elem of this.data) {
           await this._waitAvailable();
-          this._processRecord(elem).catch((e) => { reject(e); });
+          this._processRecord(elem).catch((e) => {
+            reject(e);
+          });
         }
         this.eventEmitter.once(PromisePool.DRAIN, () => resolve(this.results));
       } catch (e) {

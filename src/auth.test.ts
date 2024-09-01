@@ -3,7 +3,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import crypt from 'apache-crypt';
-import fs from 'node:fs'
+import fs from 'node:fs';
 import nodePosix from '@ilb/posix';
 import hash from 'sha512crypt-node';
 import userid from 'userid';
@@ -35,178 +35,194 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   log: jest.fn(),
-}
+};
 jest.mock('./lib/logger', () => ({
   Logger: {
-    child: () => mockLogger
-  }
+    child: () => mockLogger,
+  },
 }));
 
 import { authenticate, existsOnSystem, testMembership } from './auth-new';
 
 describe('auth', () => {
   describe('authenticate', () => {
-      const expectedUser = 'minecraft';
-      const expectedPassword = 'password';
+    const expectedUser = 'minecraft';
+    const expectedPassword = 'password';
 
-      const salt = 'salt'
-      const sha512crypt = hash.sha512crypt(expectedPassword, salt);
-      const apacheCrypt = crypt(expectedPassword);
+    const salt = 'salt';
+    const sha512crypt = hash.sha512crypt(expectedPassword, salt);
+    const apacheCrypt = crypt(expectedPassword);
 
-      let mockPam;
-      let mockShadow;
-      let mockPosix;
+    let mockPam;
+    let mockShadow;
+    let mockPosix;
 
-      beforeAll(() => {
-        jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({} as fs.Stats));
-        mockPam = jest.spyOn(authenticatePam, 'authenticate');
-        mockShadow = jest.spyOn(passwd, 'getShadow');
-        mockPosix = jest.spyOn(nodePosix, 'getpwnam')
+    beforeAll(() => {
+      jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({} as fs.Stats));
+      mockPam = jest.spyOn(authenticatePam, 'authenticate');
+      mockShadow = jest.spyOn(passwd, 'getShadow');
+      mockPosix = jest.spyOn(nodePosix, 'getpwnam');
+    });
+
+    afterAll(() => {
+      jest.resetAllMocks();
+    });
+
+    beforeEach(() => {
+      // Default pam and shadow to throw errors to guarantee fallbacks
+      // These are overridden as needed in each test
+      mockPam.mockImplementation(() => {
+        throw new Error('pam error');
       });
-
-      afterAll(() => {
-        jest.resetAllMocks();
-      });
-
-      beforeEach(() => {
-        // Default pam and shadow to throw errors to guarantee fallbacks
-        // These are overridden as needed in each test
-        mockPam.mockImplementation(() => {
-          throw new Error('pam error');
-        })
-        mockShadow.mockImplementation(() => {
-          throw new Error('shadow error');
-        });
-      });
-
-      afterEach(() => {
-        jest.resetAllMocks();
-      });
-
-      test('pam - should return true if the PAM is able to authenticate', async () => {
-        mockPam.mockImplementation((user, plaintext, cb) => {
-          // Logical not - Matches: error == false, No match: error == true
-          cb(plaintext !== expectedPassword)
-        });
-
-        const result = await authenticate(expectedUser, expectedPassword);
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('pam/shadow - should fall back to shadow if PAM authentication fails', async () => {
-        mockPam.mockImplementation((user, plaintext, cb) => {
-          cb('error')
-        });
-
-        mockShadow.mockImplementation((data, cb) => {
-          cb(null, {password: sha512crypt})
-        });
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('shadow - should return true if the hashed and salted password matches', async () => {
-        mockShadow.mockImplementation((data, cb) => {
-          cb(null, {password: sha512crypt})
-        });
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('shadow/posix(crypt) - should fall back to posix if shadow has an error', async () => {
-        mockShadow.mockImplementation((data, cb) => {
-          cb('error')
-        });
-        mockPosix.mockReturnValue({passwd: apacheCrypt});
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('shadow/posix(crypt) - should fall back to posix if the password is "!"', async () => {
-        mockShadow.mockImplementation((data, cb) => {
-          cb(null, { password: '!' })
-        });
-        mockPosix.mockReturnValue({passwd: apacheCrypt});
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('shadow/posix(crypt) - should fall back to posix if shadow returns no data', async () => {
-        mockShadow.mockImplementation((data, cb) => {
-          cb(null, null)
-        });
-        mockPosix.mockReturnValue({passwd: apacheCrypt});
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('shadow/posix(sha512crypt) - should fall back to posix if the password does not match', async () => {
-        mockShadow.mockImplementation((data, cb) => {
-          cb(null, { password: `$6$${salt}$doesnotmatch` })
-        });
-        mockPosix.mockReturnValue({passwd: sha512crypt});
-
-        const result = await authenticate(expectedUser, expectedPassword)
-        expect(result).toEqual(expectedUser);
-      });
-
-      test('posix - should reject the promise if there is an error retrieving posix data', async () => {
-        const err = new Error('posix error')
-        mockPosix.mockImplementation(() => { throw err });
-
-        await expect(async () => { await authenticate(expectedUser, 'all_failed'); }).rejects.toEqual(err)
-      });
-
-      test('posix - should reject the promise if no posix auth data is returned for the user', async () => {
-        mockPosix.mockReturnValue(null);
-
-        await expect(async () => { await authenticate(expectedUser, 'all_failed'); }).rejects.toBeTruthy()
-      });
-
-      test('posix - should reject the promise if the password does not match', async () => {
-        mockPosix.mockReturnValue({ passwd: `$6$${salt}$doesnotmatch` });
-
-        await expect(async () => { await authenticate(expectedUser, 'all_failed'); }).rejects.toBeTruthy()
-      });
-
-      test('posix - should reject the promise if the password is not returned by getpwnam', async () => {
-        mockPosix.mockReturnValue({ passwd: 'x' });
-
-        await expect(async () => { await authenticate(expectedUser, 'all_failed'); }).rejects.toBeTruthy()
-      });
-
-      test('posix - should reject the promise if there is an error', async () => {
-        const err = new Error('sha512crypt error')
-        mockPosix.mockReturnValue({ passwd: sha512crypt });
-        jest.spyOn(hash, 'sha512crypt').mockImplementation(() => { throw err })
-
-        await expect(async () => { await authenticate(expectedUser, 'all_failed'); }).rejects.toEqual(err)
+      mockShadow.mockImplementation(() => {
+        throw new Error('shadow error');
       });
     });
 
+    afterEach(() => {
+      jest.resetAllMocks();
+    });
+
+    test('pam - should return true if the PAM is able to authenticate', async () => {
+      mockPam.mockImplementation((user, plaintext, cb) => {
+        // Logical not - Matches: error == false, No match: error == true
+        cb(plaintext !== expectedPassword);
+      });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('pam/shadow - should fall back to shadow if PAM authentication fails', async () => {
+      mockPam.mockImplementation((user, plaintext, cb) => {
+        cb('error');
+      });
+
+      mockShadow.mockImplementation((data, cb) => {
+        cb(null, { password: sha512crypt });
+      });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('shadow - should return true if the hashed and salted password matches', async () => {
+      mockShadow.mockImplementation((data, cb) => {
+        cb(null, { password: sha512crypt });
+      });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('shadow/posix(crypt) - should fall back to posix if shadow has an error', async () => {
+      mockShadow.mockImplementation((data, cb) => {
+        cb('error');
+      });
+      mockPosix.mockReturnValue({ passwd: apacheCrypt });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('shadow/posix(crypt) - should fall back to posix if the password is "!"', async () => {
+      mockShadow.mockImplementation((data, cb) => {
+        cb(null, { password: '!' });
+      });
+      mockPosix.mockReturnValue({ passwd: apacheCrypt });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('shadow/posix(crypt) - should fall back to posix if shadow returns no data', async () => {
+      mockShadow.mockImplementation((data, cb) => {
+        cb(null, null);
+      });
+      mockPosix.mockReturnValue({ passwd: apacheCrypt });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('shadow/posix(sha512crypt) - should fall back to posix if the password does not match', async () => {
+      mockShadow.mockImplementation((data, cb) => {
+        cb(null, { password: `$6$${salt}$doesnotmatch` });
+      });
+      mockPosix.mockReturnValue({ passwd: sha512crypt });
+
+      const result = await authenticate(expectedUser, expectedPassword);
+      expect(result).toEqual(expectedUser);
+    });
+
+    test('posix - should reject the promise if there is an error retrieving posix data', async () => {
+      const err = new Error('posix error');
+      mockPosix.mockImplementation(() => {
+        throw err;
+      });
+
+      await expect(async () => {
+        await authenticate(expectedUser, 'all_failed');
+      }).rejects.toEqual(err);
+    });
+
+    test('posix - should reject the promise if no posix auth data is returned for the user', async () => {
+      mockPosix.mockReturnValue(null);
+
+      await expect(async () => {
+        await authenticate(expectedUser, 'all_failed');
+      }).rejects.toBeTruthy();
+    });
+
+    test('posix - should reject the promise if the password does not match', async () => {
+      mockPosix.mockReturnValue({ passwd: `$6$${salt}$doesnotmatch` });
+
+      await expect(async () => {
+        await authenticate(expectedUser, 'all_failed');
+      }).rejects.toBeTruthy();
+    });
+
+    test('posix - should reject the promise if the password is not returned by getpwnam', async () => {
+      mockPosix.mockReturnValue({ passwd: 'x' });
+
+      await expect(async () => {
+        await authenticate(expectedUser, 'all_failed');
+      }).rejects.toBeTruthy();
+    });
+
+    test('posix - should reject the promise if there is an error', async () => {
+      const err = new Error('sha512crypt error');
+      mockPosix.mockReturnValue({ passwd: sha512crypt });
+      jest.spyOn(hash, 'sha512crypt').mockImplementation(() => {
+        throw err;
+      });
+
+      await expect(async () => {
+        await authenticate(expectedUser, 'all_failed');
+      }).rejects.toEqual(err);
+    });
+  });
+
   describe('testMembership', () => {
     const expectedGroupname = 'minecraft';
-    const expectedUsername = 'getgroups'
+    const expectedUsername = 'getgroups';
     const expectedGid = 1001;
     let mockGetGroups;
 
     beforeAll(() => {
       mockGetGroups = passwd.getGroups();
 
-      mockGetGroups.on.mockImplementation((event: string, cb: (data?: { users: string[], gid: number, groupname: string }) => any) => {
-        if (event === 'group') {
-          cb({ users: [expectedUsername], gid: expectedGid, groupname: expectedGroupname });
+      mockGetGroups.on.mockImplementation(
+        (event: string, cb: (data?: { users: string[]; gid: number; groupname: string }) => any) => {
+          if (event === 'group') {
+            cb({ users: [expectedUsername], gid: expectedGid, groupname: expectedGroupname });
+          }
+          if (event === 'end') {
+            cb();
+          }
+          return mockGetGroups;
         }
-        if (event === 'end') {
-          cb();
-        }
-        return mockGetGroups;
-      });
+      );
     });
 
     afterAll(() => {
@@ -244,7 +260,7 @@ describe('auth', () => {
 
     test('should handle errors from userid', async () => {
       jest.spyOn(userid, 'gids').mockImplementation(() => {
-        throw new Error('userid error')
+        throw new Error('userid error');
       });
       const promise = testMembership('userid', expectedGroupname);
       mockGetGroups.emit('group');
@@ -271,7 +287,7 @@ describe('auth', () => {
         }
         if (event === 'end') {
           cb();
-        };
+        }
         return mockGetUsers;
       });
 
@@ -281,7 +297,7 @@ describe('auth', () => {
         }
         if (event === 'end') {
           cb();
-        };
+        }
         return mockGetGroups;
       });
     });

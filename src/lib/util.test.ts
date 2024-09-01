@@ -7,12 +7,12 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   log: jest.fn(),
-}
+};
 
 jest.mock('./logger', () => ({
   Logger: {
-    child: () => mockLogger
-  }
+    child: () => mockLogger,
+  },
 }));
 
 import { readIni, splitBuffer, bufferToAscii, PromisePool } from './util';
@@ -88,11 +88,10 @@ describe('bufferToAscii', () => {
 });
 
 describe('PromisePool', () => {
-
   beforeAll(() => {
     // See this gist for details on jest fake timers with promises:
     // https://gist.github.com/apieceofbart/e6dea8d884d29cf88cdb54ef14ddbcc4?permalink_comment_id=4760758#gistcomment-4760758
-    jest.useFakeTimers({doNotFake: ['nextTick']});
+    jest.useFakeTimers({ doNotFake: ['nextTick'] });
   });
 
   afterAll(() => {
@@ -102,7 +101,7 @@ describe('PromisePool', () => {
   test('should return a valid promise pool when constructed', () => {
     const data = ['a', 'b', 'c'];
     const limit = 1;
-    const processor = (str) => Promise.resolve(`${str}${str}`)
+    const processor = (str) => Promise.resolve(`${str}${str}`);
     const pool = new PromisePool(data, limit, processor);
 
     expect(pool.data).toEqual(data);
@@ -113,7 +112,7 @@ describe('PromisePool', () => {
   test('should set the concurrancy value and return the pool for chaining', () => {
     const data = ['a', 'b', 'c'];
     const limit = 1;
-    const processor = (str) => Promise.resolve(`${str}${str}`)
+    const processor = (str) => Promise.resolve(`${str}${str}`);
     const pool = new PromisePool(data, limit, processor);
 
     expect(pool.withConcurrency(3)).toBe(pool);
@@ -185,7 +184,7 @@ describe('PromisePool', () => {
       return new Promise(() => {
         setTimeout(() => {
           throw new Error('rejected');
-        }, 100)
+        }, 100);
       });
     };
 
@@ -205,7 +204,9 @@ describe('PromisePool', () => {
     const err = new Error('rejected');
     const processor = () => {
       return new Promise((resolve, reject) => {
-        setTimeout(() => { reject(err) }, 100)
+        setTimeout(() => {
+          reject(err);
+        }, 100);
       });
     };
 

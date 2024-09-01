@@ -1146,7 +1146,7 @@ export class Instance {
    * @returns Owner and group information for this instance
    */
   async getOwner(): Promise<{ uid: number; gid: number; username: string; groupname: string }> {
-    const statData = await fs.promises.stat(this.env.cwd)
+    const statData = await fs.promises.stat(this.env.cwd);
     return {
       uid: statData.uid,
       gid: statData.gid,
@@ -1212,8 +1212,8 @@ export class Instance {
    * Run the FTB Installer script
    */
   async runInstaller(): Promise<void> {
-    if (!(await this.exists()) || !this.isUp()) {
-      return Promise.reject(`instance ${this.name} does not exist or is not running`);
+    if (!(await this.exists()) || this.isUp()) {
+      return Promise.reject(`instance ${this.name} does not exist or is running`);
     }
 
     const args = ['FTBInstall.sh'];
@@ -1225,8 +1225,7 @@ export class Instance {
       const proc = child.spawn(binary, args, params);
       proc.once('close', (code) => {
         if (code) {
-          reject(code);
-          return;
+          return reject(code);
         }
 
         resolve();
@@ -1260,6 +1259,57 @@ export class Instance {
   }
 
   /**
+   * Get the disk usage of one of this instances' folders.
+   *
+   * @param dir Which directory to check the usage of: archive, backup, or working
+   * @returns Size in
+   */
+  async du(dir: 'awd' | 'bwd' | 'cwd'): Promise<number> {
+    let filepath;
+    switch (dir) {
+      case 'awd':
+        filepath = this.env.awd;
+        break;
+      case 'bwd':
+        filepath = this.env.bwd;
+        break;
+      case 'cwd':
+        filepath = this.env.cwd;
+        break;
+      default:
+        return Promise.reject(`invalid directory: ${dir}`);
+    }
+
+    const TIMEOUT = 3 * 1000; // Default to 3s timeout
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject('timeout getting directory usage');
+      }, TIMEOUT);
+
+      du(filepath, { disk: true }, (err, size) => {
+        clearTimeout(timer);
+
+        if (err) {
+          reject(err);
+        }
+
+        resolve(Number(size));
+      });
+    });
+  }
+
+  /**
+   * Accept the Minecraft server EULA by creating eula.txt with the contents 'eula=true'
+   */
+  async acceptEula() {
+    const EULA_PATH = path.join(this.env.cwd, 'eula.txt');
+    await fs.outputFile(EULA_PATH, 'eula=true');
+
+    const dirStat = await fs.promises.stat(this.env.cwd);
+    return await fs.promises.chown(EULA_PATH, dirStat.uid, dirStat.gid);
+  }
+
+  /**
    * Get the status of the current server by checking if server.properties exists
    *
    * @returns True if server.properties exists, false otherwise
@@ -1279,7 +1329,6 @@ export class Instance {
   isUp(): boolean {
     return this.name in Instance.listRunningInstancePids();
   }
-
 
   /**
    * Get the startup arguments for this instance
@@ -1419,74 +1468,6 @@ export class Instance {
   }
 
   /**
-   * Get the disk usage of one of this instances' folders.
-   *
-   * @param dir Which directory to check the usage of: archive, backup, or working
-   * @returns Size in
-   */
-  async du(dir: 'awd' | 'bwd' | 'cwd'): Promise<number> {
-    let filepath;
-    switch (dir) {
-      case 'awd':
-        filepath = this.env.awd;
-        break;
-      case 'bwd':
-        filepath = this.env.bwd;
-        break;
-      case 'cwd':
-        filepath = this.env.cwd;
-        break;
-      default:
-        return Promise.reject(`invalid directory: ${dir}`);
-    }
-
-    const TIMEOUT = 3 * 1000; // Default to 3s timeout
-    return await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject('timeout getting directory usage');
-      }, TIMEOUT);
-
-      du(filepath, { disk: true }, (err, size) => {
-        clearTimeout(timer);
-
-        if (err) {
-          reject(err);
-        }
-
-        resolve(Number(size));
-      });
-    });
-  }
-
-  /**
-   * Check if this instance has the eula.txt file for the Minecrafte server EULA and it has been accepted
-   *
-   * @returns Whether or not this instance has accepted the Minecraft server EULA
-   */
-  async eulaStatus(): Promise<boolean> {
-    return await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt')).then((data) => {
-      const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
-      const lines = data.toString().split('\n');
-      let matches = false;
-      for (const i in lines) {
-        if (lines[i].match(REGEX_EULA_TRUE)) matches = true;
-      }
-      return matches;
-    });
-  }
-
-  /**
-   * Accept the Minecraft server EULA by creating eula.txt with the contents 'eula=true'
-   */
-  async acceptEula() {
-    const EULA_PATH = path.join(this.env.cwd, 'eula.txt');
-    await fs.outputFile(EULA_PATH, 'eula=true');
-
-    const dirStat = await fs.promises.stat(this.env.cwd);
-    return await fs.promises.chown(EULA_PATH, dirStat.uid, dirStat.gid);
-  }
-
-  /**
    * Get the list of potentially runnable server files to set in server.config
    *
    * @returns The list of potentially runnable server jar or phar files
@@ -1547,6 +1528,23 @@ export class Instance {
       });
 
       this.stuff('save-on');
+    });
+  }
+
+  /**
+   * Check if this instance has the eula.txt file for the Minecrafte server EULA and it has been accepted
+   *
+   * @returns Whether or not this instance has accepted the Minecraft server EULA
+   */
+  async getEulaState(): Promise<boolean> {
+    return await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt')).then((data) => {
+      const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
+      const lines = data.toString().split('\n');
+      let matches = false;
+      for (const i in lines) {
+        if (lines[i].match(REGEX_EULA_TRUE)) matches = true;
+      }
+      return matches;
     });
   }
 

@@ -41,7 +41,7 @@ export const authenticate = async (user: string, plaintext: string): Promise<str
           if (passed) {
             resolve(user);
           } else {
-            reject('password does not match /etc/shadow')
+            reject('password does not match /etc/shadow');
           }
         } else {
           reject('no information returned from /etc/shadow');
@@ -56,7 +56,7 @@ export const authenticate = async (user: string, plaintext: string): Promise<str
       try {
         const userData = nodePosix.getpwnam(user);
         if (!userData) {
-          reject('no information from getpwnam')
+          reject('no information from getpwnam');
         }
 
         // Attempt to use crypt first
@@ -74,9 +74,8 @@ export const authenticate = async (user: string, plaintext: string): Promise<str
         if (passed) {
           resolve(user);
         } else {
-          reject('invalid posix password')
+          reject('invalid posix password');
         }
-
       } catch (e) {
         reject(e);
       }
@@ -140,7 +139,7 @@ export const testMembership = async (username: string, group: string): Promise<b
  * @param gid GID to check
  * @returns [uidExists: boolean, gidExists: boolean] Tuple indicating if the UID, GID, or both exist
  */
-export const existsOnSystem = async (uid: number, gid:number ): Promise<boolean[]> => {
+export const existsOnSystem = async (uid: number, gid: number): Promise<boolean[]> => {
   return await Promise.all([
     new Promise<boolean>((resolve) => {
       passwd

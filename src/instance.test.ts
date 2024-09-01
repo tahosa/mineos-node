@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import child from 'child_process';
+import child, { type ChildProcess } from 'child_process';
 import fsExtra from 'fs-extra';
 import { EventEmitter } from 'node:events';
 import fs, { type Stats } from 'node:fs';
@@ -7,7 +7,6 @@ import net from 'node:net';
 import ini from 'ini';
 import { Rsync } from 'rsync2';
 import userid from 'userid';
-import which from 'which';
 
 import chownr from 'chownr';
 jest.mock('chownr');
@@ -17,6 +16,9 @@ jest.mock('mcquery');
 
 import { Tail } from 'tail';
 jest.mock('tail');
+
+import which from 'which';
+jest.mock('which');
 
 import { CronTask, type ServerConfig } from './constants';
 import './lib/logger';
@@ -430,11 +432,11 @@ describe('Instance', () => {
     });
 
     describe('create', () => {
-      let mockChildEmitter;
+      let mockChild: EventEmitter;
 
       beforeAll(() => {
-        mockChildEmitter = new EventEmitter();
-        jest.spyOn(mockChildEmitter, 'once');
+        mockChild = new EventEmitter();
+        jest.spyOn(mockChild, 'once');
 
         jest.spyOn(which, 'sync').mockReturnValue('/usr/bin/tar');
         jest.spyOn(fsExtra, 'ensureDirSync').mockImplementation(() => {});
@@ -442,9 +444,7 @@ describe('Instance', () => {
         jest.spyOn(fsExtra, 'chownSync').mockImplementation(() => {});
         jest.spyOn(fsExtra, 'writeFileSync').mockImplementation(() => {});
         jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from(''));
-        (jest.spyOn(child, 'spawn') as jest.Mock).mockImplementation(() => {
-          return mockChildEmitter;
-        });
+        jest.spyOn(child, 'spawn').mockReturnValue(mockChild as ChildProcess);
       });
 
       beforeEach(() => {
@@ -453,16 +453,15 @@ describe('Instance', () => {
         jest.spyOn(inst, 'isUp').mockReturnValue(false);
       });
 
-
       test('should not create a server which already exists', async () => {
         (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(true));
-        expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
+        await expect(() => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
       });
 
       // This is an edge case if the files are manually deleted but the instance is not stopped first
       test('should not create a server which matches a running instance name', async () => {
         (inst.isUp as jest.Mock).mockReturnValue(true);
-        expect(async () => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
+        await expect(() => inst.create({ uid: 1000, gid: 1000 })).rejects.toBeTruthy();
       });
 
       test('should create a regular minecraft server', async () => {
@@ -485,9 +484,7 @@ describe('Instance', () => {
 
       test('should reject creation from archive if file extension is not supported', async () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.yml');
-        expect(async () => {
-          await promise;
-        }).rejects.toBeTruthy();
+        await expect(() => promise).rejects.toBeTruthy();
       });
 
       test('should reject creation from archive if tar returns an error', async () => {
@@ -495,20 +492,18 @@ describe('Instance', () => {
 
         await new Promise<void>((resolve) => {
           setTimeout(() => {
-            mockChildEmitter.emit('exit', 1);
+            mockChild.emit('exit', 1);
             resolve();
           }, 1);
         });
-        expect(async () => {
-          await promise;
-        }).rejects.toBeTruthy();
+        await expect(() => promise).rejects.toBeTruthy();
       });
 
       test('should create an archive from a tar file at an absolute path', async () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar');
         await new Promise<void>((resolve) => {
           setTimeout(() => {
-            mockChildEmitter.emit('exit');
+            mockChild.emit('exit');
             resolve();
           }, 1);
         });
@@ -531,7 +526,7 @@ describe('Instance', () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz');
         await new Promise<void>((resolve) => {
           setTimeout(() => {
-            mockChildEmitter.emit('exit');
+            mockChild.emit('exit');
             resolve();
           }, 1);
         });
@@ -559,14 +554,12 @@ describe('Instance', () => {
 
       test('should not delete a server which does not exist', async () => {
         (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-
-        expect(async () => inst.delete()).rejects.toBeTruthy();
+        await expect(() => inst.delete()).rejects.toBeTruthy();
       });
 
       test('should not delete a server which matches a running instance name', async () => {
         (inst.isUp as jest.Mock).mockReturnValue(true);
-
-        expect(async () => inst.delete()).rejects.toBeTruthy();
+        await expect(() => inst.delete()).rejects.toBeTruthy();
       });
 
       test('should force remove all directories', async () => {
@@ -593,17 +586,17 @@ describe('Instance', () => {
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+          await expect(() => inst.copyProfile()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(true);
-          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+          await expect(() => inst.copyProfile()).rejects.toBeTruthy();
         });
 
         test('should reject if a profile is not set', async () => {
           jest.spyOn(inst, 'sc').mockReturnValue({} as ServerConfig);
-          await expect(async () => inst.copyProfile()).rejects.toBeTruthy();
+          await expect(() => inst.copyProfile()).rejects.toBeTruthy();
         });
 
         test('should use rsync to copy the profile files', async () => {
@@ -723,17 +716,17 @@ describe('Instance', () => {
       describe('ping', () => {
         test('should reject if there is not a port set for the instance', async () => {
           (inst.sp as jest.Mock).mockReturnValue({});
-          await expect(async () => inst.ping()).rejects.toBeTruthy();
+          await expect(() => inst.ping()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is a phar server', async () => {
           (inst.sc as jest.Mock).mockReturnValue({ java: { jarfile: 'server.phar' } });
-          await expect(async () => inst.ping()).rejects.toBeTruthy();
+          await expect(() => inst.ping()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(false);
-          await expect(async () => inst.ping()).rejects.toBeTruthy();
+          await expect(() => inst.ping()).rejects.toBeTruthy();
         });
 
         test('should reject if there is an error on the socket', async () => {
@@ -794,12 +787,12 @@ describe('Instance', () => {
       describe('query', () => {
         test('should reject if there is not a port set for the instance', async () => {
           (inst.sc as jest.Mock).mockReturnValue({});
-          await expect(async () => inst.query()).rejects.toBeTruthy();
+          await expect(() => inst.query()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is a phar server', async () => {
           (inst.sc as jest.Mock).mockReturnValue({ java: { jarfile: 'server.phar' } });
-          await expect(async () => inst.query()).rejects.toBeTruthy();
+          await expect(() => inst.query()).rejects.toBeTruthy();
         });
 
         test('should reject if there is an error querying the server', async () => {
@@ -810,7 +803,7 @@ describe('Instance', () => {
             connect: () => Promise.resolve(),
           };
           mcquery.mockReturnValue(mockMcqueryInstance);
-          await expect(async () => inst.query()).rejects.toBeTruthy();
+          await expect(() => inst.query()).rejects.toBeTruthy();
         });
 
         test('should return the value from mcquery', async () => {
@@ -830,12 +823,12 @@ describe('Instance', () => {
       describe('stuff', () => {
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
+          await expect(() => inst.stuff('command')).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(false);
-          await expect(async () => inst.stuff('command')).rejects.toBeTruthy();
+          await expect(() => inst.stuff('command')).rejects.toBeTruthy();
         });
 
         test('should call screen with the command', async () => {
@@ -856,7 +849,7 @@ describe('Instance', () => {
       });
 
       describe('start', () => {
-        let mockChild;
+        let mockChild: EventEmitter;
 
         beforeAll(() => {
           jest.useFakeTimers({ doNotFake: ['nextTick'] });
@@ -870,22 +863,22 @@ describe('Instance', () => {
           jest.spyOn(inst, 'isUp').mockReturnValue(false);
           mockChild = new EventEmitter();
           jest.spyOn(mockChild, 'once');
-          (jest.spyOn(child, 'spawn') as jest.Mock).mockReturnValue(mockChild);
+          jest.spyOn(child, 'spawn').mockReturnValue(mockChild as ChildProcess);
         });
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.start()).rejects.toBeTruthy();
+          await expect(() => inst.start()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is already running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(true);
-          await expect(async () => inst.start()).rejects.toBeTruthy();
+          await expect(() => inst.start()).rejects.toBeTruthy();
         });
 
         test('should reject if copying the profile results in an error', async () => {
           (inst.profileDelta as jest.Mock).mockReturnValue(Promise.reject(1));
-          await expect(async () => inst.start()).rejects.toBeTruthy();
+          await expect(() => inst.start()).rejects.toBeTruthy();
         });
 
         test('should assume sensible defaults if the profile and start args are missing', async () => {
@@ -1004,7 +997,7 @@ describe('Instance', () => {
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.stop()).rejects.toBeTruthy();
+          await expect(() => inst.stop()).rejects.toBeTruthy();
         });
 
         test('should resolve if the instance is not running', async () => {
@@ -1032,7 +1025,7 @@ describe('Instance', () => {
         });
 
         test('should reject if the instance does not stop within the iteration counter', async () => {
-          (inst.isUp as jest.Mock).mockReturnValue(true)
+          (inst.isUp as jest.Mock).mockReturnValue(true);
           const promise = inst.stop();
           await new Promise(process.nextTick);
 
@@ -1062,12 +1055,12 @@ describe('Instance', () => {
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.kill()).rejects.toBeTruthy();
+          await expect(() => inst.kill()).rejects.toBeTruthy();
         });
 
         test('should reject if there is no running java process', async () => {
           jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 1001 } });
-          await expect(async () => inst.kill()).rejects.toBeTruthy();
+          await expect(() => inst.kill()).rejects.toBeTruthy();
         });
 
         test('should resolve if the instance has no running processes', async () => {
@@ -1115,12 +1108,12 @@ describe('Instance', () => {
 
         it('should reject if the instance fails to stop', async () => {
           jest.spyOn(inst, 'stop').mockReturnValue(Promise.reject(new Error('error')));
-          await expect(async () => inst.restart()).rejects.toBeTruthy();
+          await expect(() => inst.restart()).rejects.toBeTruthy();
         });
 
         it('should reject if the instance fails to start', async () => {
           jest.spyOn(inst, 'start').mockReturnValue(Promise.reject(new Error('error')));
-          await expect(async () => inst.restart()).rejects.toBeTruthy();
+          await expect(() => inst.restart()).rejects.toBeTruthy();
         });
 
         it('should resolve if the instance succesfully restarts', async () => {
@@ -1138,12 +1131,12 @@ describe('Instance', () => {
 
         it('should reject if the instance fails to stop', async () => {
           jest.spyOn(inst, 'stop').mockReturnValue(Promise.reject(new Error('error')));
-          await expect(async () => inst.stopAndBackup()).rejects.toBeTruthy();
+          await expect(() => inst.stopAndBackup()).rejects.toBeTruthy();
         });
 
         it('should reject if the instance fails to run the backup', async () => {
           jest.spyOn(inst, 'backup').mockReturnValue(Promise.reject(new Error('error')));
-          await expect(async () => inst.stopAndBackup()).rejects.toBeTruthy();
+          await expect(() => inst.stopAndBackup()).rejects.toBeTruthy();
         });
 
         it('should resolve if the instance succesfully restarts', async () => {
@@ -1168,17 +1161,17 @@ describe('Instance', () => {
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+          await expect(() => inst.saveall()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(false);
-          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+          await expect(() => inst.saveall()).rejects.toBeTruthy();
         });
 
         test('should reject if stuff fails to send the command', async () => {
           jest.spyOn(inst, 'stuff').mockReturnValue(Promise.reject(new Error('error')));
-          await expect(async () => inst.saveall()).rejects.toBeTruthy();
+          await expect(() => inst.saveall()).rejects.toBeTruthy();
         });
 
         test('should wait the configured amount of time before resolving', async () => {
@@ -1213,19 +1206,19 @@ describe('Instance', () => {
 
         test('should reject if the instance does not exist', async () => {
           (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
-          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+          await expect(() => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
         test('should reject if the instance is not running', async () => {
           (inst.isUp as jest.Mock).mockReturnValue(false);
-          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+          await expect(() => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
         test('should reject if the tail cannot be started', async () => {
           Tail.mockImplementation(() => {
             throw new Error('error');
           });
-          await expect(async () => inst.saveallLatestLog()).rejects.toBeTruthy();
+          await expect(() => inst.saveallLatestLog()).rejects.toBeTruthy();
         });
 
         test('should reject if the save message is not seen before the timeout', async () => {
@@ -1235,7 +1228,7 @@ describe('Instance', () => {
           jest.advanceTimersByTime(10000);
           await new Promise(process.nextTick);
 
-          await expect(async () => promise).rejects.toBeTruthy();
+          await expect(() => promise).rejects.toBeTruthy();
           expect(inst.stuff).toHaveBeenCalledWith('save-all');
           expect(mockTail.unwatch).toHaveBeenCalled();
         });
@@ -1257,7 +1250,7 @@ describe('Instance', () => {
     });
 
     describe('backup and archive functions', () => {
-      let mockChildEmitter: EventEmitter;
+      let mockChild: EventEmitter;
 
       beforeAll(() => {
         jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
@@ -1271,11 +1264,9 @@ describe('Instance', () => {
         jest.spyOn(inst, 'saveallLatestLog').mockReturnValue(Promise.resolve());
         jest.spyOn(inst, 'getAutosaveState').mockReturnValue(Promise.resolve(false));
 
-        mockChildEmitter = new EventEmitter();
-        jest.spyOn(mockChildEmitter, 'once');
-        (jest.spyOn(child, 'spawn') as jest.Mock).mockImplementation(() => {
-          return mockChildEmitter;
-        });
+        mockChild = new EventEmitter();
+        jest.spyOn(mockChild, 'once');
+        jest.spyOn(child, 'spawn').mockReturnValue(mockChild as ChildProcess);
       });
 
       describe('archive', () => {
@@ -1283,17 +1274,17 @@ describe('Instance', () => {
           const promise = inst.archive();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
-          await expect(async () => promise).rejects.toBeTruthy();
+          await expect(() => promise).rejects.toBeTruthy();
         });
 
         test('should attempt to force a save', async () => {
           const promise = inst.archive(true);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1318,7 +1309,7 @@ describe('Instance', () => {
           const promise = inst.archive(true);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1332,7 +1323,7 @@ describe('Instance', () => {
           const promise = inst.archive(true);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1348,7 +1339,7 @@ describe('Instance', () => {
           const promise = inst.backup();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1358,7 +1349,7 @@ describe('Instance', () => {
           const promise = inst.backup();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1375,7 +1366,7 @@ describe('Instance', () => {
           const promise = inst.restore(10);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1385,7 +1376,7 @@ describe('Instance', () => {
           const promise = inst.restore(10);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1412,7 +1403,7 @@ describe('Instance', () => {
           const promise = inst.previousVersion('filename', 1);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('error', new Error('error'));
+          mockChild.emit('error', new Error('error'));
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1422,7 +1413,7 @@ describe('Instance', () => {
           const promise = inst.previousVersion('filename', 1);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1433,7 +1424,7 @@ describe('Instance', () => {
           const promise = inst.previousVersion('filename', 1);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
           await new Promise(process.nextTick);
 
@@ -1444,7 +1435,7 @@ describe('Instance', () => {
           const promise = inst.previousVersion('filename', 1);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
           await new Promise(process.nextTick);
 
@@ -1458,14 +1449,14 @@ describe('Instance', () => {
 
         beforeEach(() => {
           mockStdout = new EventEmitter();
-          (mockChildEmitter as any).stdout = mockStdout;
+          (mockChild as any).stdout = mockStdout;
         });
 
         test('should reject if rdiff-backup has an error', async () => {
           const promise = inst.listIncrements();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('error', new Error('error'));
+          mockChild.emit('error', new Error('error'));
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1475,7 +1466,7 @@ describe('Instance', () => {
           const promise = inst.listIncrements();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1497,7 +1488,7 @@ Current Mirror: Mon Apr 30 00:00:00 2024
           mockStdout.emit('data', mockIncrements);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           const result = await promise;
@@ -1522,14 +1513,14 @@ Current Mirror: Mon Apr 30 00:00:00 2024
 
         beforeEach(() => {
           mockStdout = new EventEmitter();
-          (mockChildEmitter as any).stdout = mockStdout;
+          (mockChild as any).stdout = mockStdout;
         });
 
         test('should reject if rdiff-backup has an error', async () => {
           const promise = inst.listIncrementSizes();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('error', new Error('error'));
+          mockChild.emit('error', new Error('error'));
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1539,7 +1530,7 @@ Current Mirror: Mon Apr 30 00:00:00 2024
           const promise = inst.listIncrementSizes();
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1561,7 +1552,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           mockStdout.emit('data', mockIncrements);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           const result = await promise;
@@ -1637,7 +1628,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           const promise = inst.prune(2);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('error', 'error');
+          mockChild.emit('error', 'error');
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1647,7 +1638,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           const promise = inst.prune(2);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 1);
+          mockChild.emit('exit', 1);
           await new Promise(process.nextTick);
 
           await expect(() => promise).rejects.toBeTruthy();
@@ -1657,7 +1648,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           const promise = inst.prune(2);
           await new Promise(process.nextTick);
 
-          mockChildEmitter.emit('exit', 0);
+          mockChild.emit('exit', 0);
           await new Promise(process.nextTick);
 
           await promise;
@@ -1792,6 +1783,91 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           expect(chownr).toHaveBeenCalledWith(inst.env.awd, 1000, 1000, expect.anything());
         });
       });
+    });
+
+    describe('utilities', () => {
+      describe('runInstallcer', () => {
+        let mockChild: EventEmitter;
+
+        beforeEach(() => {
+          jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+          jest.spyOn(inst, 'isUp').mockReturnValue(false);
+          jest.spyOn(inst, 'getOwner').mockReturnValue(
+            Promise.resolve({
+              uid: 1000,
+              gid: 1000,
+              username: 'username',
+              groupname: 'groupname',
+            })
+          );
+
+          (which as unknown as jest.Mock).mockImplementation((command) => Promise.resolve(`/usr/bin/${command}`));
+
+          mockChild = new EventEmitter();
+          jest.spyOn(child, 'spawn').mockImplementation(() => mockChild as ChildProcess);
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
+          await expect(() => inst.runInstaller()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is running', async () => {
+          (inst.isUp as jest.Mock).mockReturnValue(true);
+          await expect(() => inst.runInstaller()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the installer process exits with an error', async () => {
+          const promise = inst.runInstaller();
+
+          await new Promise(process.nextTick);
+          mockChild.emit('close', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should run the installer in a sub-shell', async () => {
+          const promise = inst.runInstaller();
+
+          await new Promise(process.nextTick);
+          mockChild.emit('close', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenLastCalledWith('/usr/bin/sh', ['FTBInstall.sh'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+        });
+      });
+
+      describe('renice', () => {});
+
+      describe('du', () => {});
+
+      describe('acceptEula', () => {});
+    });
+
+    describe('properties', () => {
+      describe('exists', () => {});
+
+      describe('isUp', () => {});
+
+      describe('getStartArgs', () => {});
+
+      describe('getChildPid', () => {});
+
+      describe('getJavaProcessStats', () => {});
+
+      describe('getRunnableJarFiles', () => {});
+
+      describe('getAutosaveState', () => {});
+
+      describe('getEulaState', () => {});
+
+      describe('isFTBServer', () => {});
     });
   });
 });
