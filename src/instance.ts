@@ -1238,7 +1238,7 @@ export class Instance {
    *
    * @param priority Process priority
    */
-  async renice(priority: string): Promise<void> {
+  async renice(priority: number): Promise<void> {
     const javaPid = this.getChildPid('java');
     if (!(await this.exists()) || !this.isUp() || !javaPid) {
       return Promise.reject(`instance ${this.name} does not exist or is not running`);
@@ -1248,7 +1248,7 @@ export class Instance {
     const params = { cwd: this.env.cwd, uid: owner.uid, gid: owner.gid };
     const binary = which.sync('renice');
     return await new Promise((resolve, reject) => {
-      const proc = child.spawn(binary, ['-n', priority, '-p', `${javaPid}`], params);
+      const proc = child.spawn(binary, ['-n', `${priority.toFixed(0)}`, '-p', `${javaPid}`], params);
       proc.once('close', (err) => {
         if (err) {
           return reject(err);
@@ -1293,7 +1293,7 @@ export class Instance {
           reject(err);
         }
 
-        resolve(Number(size));
+        resolve(size || 0);
       });
     });
   }

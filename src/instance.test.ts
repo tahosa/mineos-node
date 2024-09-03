@@ -11,6 +11,9 @@ import userid from 'userid';
 import chownr from 'chownr';
 jest.mock('chownr');
 
+import du from 'du';
+jest.mock('du');
+
 import mcquery from 'mcquery';
 jest.mock('mcquery');
 
@@ -1677,8 +1680,8 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
     describe('filesystem ownership and permissions', () => {
       beforeEach(() => {
         jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
-        jest.spyOn(userid, 'username').mockReturnValue('username');
-        jest.spyOn(userid, 'groupname').mockReturnValue('groupname');
+        jest.spyOn(userid, 'username').mockReturnValue('user');
+        jest.spyOn(userid, 'groupname').mockReturnValue('group');
       });
 
       afterEach(() => {
@@ -1695,9 +1698,9 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
         test('should look up the uid and gid', async () => {
           const result = await inst.getOwner();
           expect(result.uid).toEqual(1000);
-          expect(result.username).toEqual('username');
+          expect(result.username).toEqual('user');
           expect(result.gid).toEqual(1000);
-          expect(result.groupname).toEqual('groupname');
+          expect(result.groupname).toEqual('group');
         });
       });
 
@@ -1796,8 +1799,8 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
             Promise.resolve({
               uid: 1000,
               gid: 1000,
-              username: 'username',
-              groupname: 'groupname',
+              username: 'user',
+              groupname: 'group',
             })
           );
 
@@ -1843,11 +1846,173 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
         });
       });
 
-      describe('renice', () => {});
+      describe('renice', () => {
+        let mockChild: EventEmitter;
 
-      describe('du', () => {});
+        beforeEach(() => {
+          jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
 
-      describe('acceptEula', () => {});
+          jest.spyOn(inst, 'isUp').mockReturnValue(true);
+          jest.spyOn(inst, 'exists').mockReturnValue(Promise.resolve(true));
+          jest.spyOn(inst, 'getChildPid').mockReturnValue(101);
+          jest
+            .spyOn(inst, 'getOwner')
+            .mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000, username: 'user', groupname: 'group' }));
+
+          mockChild = new EventEmitter();
+          jest.spyOn(child, 'spawn').mockImplementation(() => mockChild as ChildProcess);
+        });
+
+        test('should reject if the instance does not exist', async () => {
+          (inst.exists as jest.Mock).mockReturnValue(Promise.resolve(false));
+          await expect(() => inst.renice(1)).rejects.toBeTruthy();
+        });
+
+        test('should reject if the instance is not running', async () => {
+          (inst.isUp as jest.Mock).mockReturnValue(false);
+          await expect(() => inst.renice(1)).rejects.toBeTruthy();
+        });
+
+        test('should reject if there is no java process', async () => {
+          (inst.getChildPid as jest.Mock).mockReturnValue(undefined);
+          await expect(() => inst.renice(1)).rejects.toBeTruthy();
+        });
+
+        test('should reject if the renice process returns an error status', async () => {
+          const promise = inst.renice(10);
+          await new Promise(process.nextTick);
+          mockChild.emit('close', 1);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('should call renice to set the java process priority', async () => {
+          const promise = inst.renice(10.501);
+          await new Promise(process.nextTick);
+          mockChild.emit('close', 0);
+          await new Promise(process.nextTick);
+
+          await promise;
+          expect(child.spawn).toHaveBeenLastCalledWith('/usr/bin/renice', ['-n', '11', '-p', '101'], {
+            cwd: inst.env.cwd,
+            uid: 1000,
+            gid: 1000,
+          });
+        });
+      });
+
+      describe('du', () => {
+        beforeAll(() => {
+          jest.useFakeTimers({ doNotFake: ['nextTick'] });
+        });
+
+        afterAll(() => {
+          jest.useRealTimers();
+        });
+
+        beforeEach(() => {
+          (du as jest.Mock).mockImplementation((path, options, cb: any) => {
+            cb(null, 1000);
+          });
+        });
+
+        test('rejects if an invalid directory is queried', async () => {
+          await expect(() => inst.du('bad' as any)).rejects.toBeTruthy();
+        });
+
+        test('rejects if du does not return within the timeout', async () => {
+          (du as jest.Mock).mockImplementation(() => {});
+
+          const promise = inst.du('awd');
+          jest.advanceTimersByTime(3000);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('rejects if du returns an error', async () => {
+          (du as jest.Mock).mockImplementation((path, options, cb: any) => {
+            cb(new Error('error'));
+          });
+
+          const promise = inst.du('awd');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          await expect(() => promise).rejects.toBeTruthy();
+        });
+
+        test('ensures that a number always gets returned', async () => {
+          (du as jest.Mock).mockImplementation((path, options, cb: any) => {
+            cb(null, undefined);
+          });
+
+          const promise = inst.du('awd');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result).toEqual(0);
+        });
+
+        test('gets the size of the archive directory', async () => {
+          const promise = inst.du('awd');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result).toEqual(1000);
+        });
+
+        test('gets the size of the backup directory', async () => {
+          const promise = inst.du('bwd');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result).toEqual(1000);
+        });
+
+        test('gets the size of the instance server directory', async () => {
+          const promise = inst.du('cwd');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          const result = await promise;
+          expect(result).toEqual(1000);
+        });
+      });
+
+      describe('acceptEula', () => {
+        beforeEach(() => {
+          (jest.spyOn(fsExtra, 'outputFile') as jest.Mock).mockReturnValue(Promise.resolve());
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
+          jest.spyOn(fs.promises, 'chown').mockReturnValue(Promise.resolve());
+        });
+
+        test('should reject if the eula file cannot be created', async () => {
+          (fsExtra.outputFile as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.acceptEula()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the ownership of the server instance directory cannot be queried', async () => {
+          (fs.promises.stat as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.acceptEula()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the ownership of the eula file cannot be changed', async () => {
+          (fs.promises.chown as jest.Mock).mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.acceptEula()).rejects.toBeTruthy();
+        });
+
+        test('should create the eula file with the correct permissions', async () => {
+          await inst.acceptEula();
+          expect(fsExtra.outputFile).toHaveBeenCalledWith('/path/servers/server1/eula.txt', 'eula=true');
+          expect(fs.promises.stat).toHaveBeenCalledWith('/path/servers/server1');
+          expect(fs.promises.chown).toHaveBeenCalledWith('/path/servers/server1/eula.txt', 1000, 1000);
+        });
+      });
     });
 
     describe('properties', () => {
