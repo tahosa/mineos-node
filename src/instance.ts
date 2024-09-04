@@ -23,6 +23,7 @@ import { DIRS, ServerProperties, ServerConfig, CronConfig, CronTask, SP_DEFAULTS
 
 const logger = Logger.child({ service: 'instance' });
 
+// TODO: Refactor procPath logic to be more testable
 const procPaths = ['/proc', '/usr/compat/linux/proc', '/system/lxproc', '/compat/linux/proc'];
 let PROC_PATH: string;
 
@@ -1336,16 +1337,15 @@ export class Instance {
    * @returns Arguments to pass to screen to start the server
    */
   getStartArgs(): string[] {
-    const jar = (unconventional: boolean = false): string[] => {
+    const jar = (config: ServerConfig['java'], unconventional: boolean = false): string[] => {
       const systemJava = which.sync('java');
-      const javaConfig = this.sc().java;
       const javaArgs = {
-        binary: javaConfig?.java_binary || systemJava,
-        xmx: parseInt(javaConfig?.java_xmx) || 0,
-        xms: parseInt(javaConfig?.java_xms) || 0,
-        jarfile: javaConfig?.jarfile,
-        jar_args: javaConfig?.jar_args || '',
-        java_tweaks: javaConfig?.java_tweaks || null,
+        binary: config.java_binary ?? systemJava,
+        xmx: config.java_xmx ? parseInt(config.java_xmx) : 256,
+        xms: config.java_xms ? parseInt(config.java_xms) : 0,
+        jarfile: config.jarfile,
+        jar_args: config.jar_args ?? '',
+        java_tweaks: config.java_tweaks ?? null,
       };
 
       if (!javaArgs.binary) {
@@ -1353,22 +1353,15 @@ export class Instance {
       }
 
       if (javaArgs.xmx <= 0) {
-        throw new Error('Xmx heapsize must be positive integer >= 0');
+        throw new Error('Xmx heapsize must be a positive integer > 0');
       }
 
-      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms <= 0) {
-        throw new Error('Xms heapsize must be positive integer where Xmx >= Xms >= 0');
+      if (javaArgs.xmx < javaArgs.xms || javaArgs.xms < 0) {
+        throw new Error('Xms heapsize must be a positive integer where Xmx >= Xms >= 0');
       }
 
-      if (!javaArgs.jarfile) {
-        throw new Error('instance not assigned a runnable jar');
-      }
+      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server', `-Xmx${javaArgs.xmx}M`];
 
-      const screenArgs = ['-dmS', `mc-${this.name}`, javaArgs.binary, '-server'];
-
-      if (javaArgs.xmx) {
-        screenArgs.push(`-Xmx${javaArgs.xmx}M`);
-      }
       if (javaArgs.xms) {
         screenArgs.push(`-Xms${javaArgs.xms}M`);
       }
@@ -1379,7 +1372,9 @@ export class Instance {
 
       screenArgs.push('-jar', javaArgs.jarfile);
 
-      screenArgs.push(...javaArgs.jar_args.split(' '));
+      if (javaArgs.jar_args) {
+        screenArgs.push(...javaArgs.jar_args.split(' '));
+      }
 
       if (!unconventional && javaArgs.jarfile.match(/forge.*installer.jar$/)) {
         screenArgs.push('--installServer');
@@ -1388,7 +1383,7 @@ export class Instance {
       return screenArgs;
     };
 
-    const phar = (): string[] => {
+    const phar = (config: ServerConfig['java']): string[] => {
       let binary: string;
 
       try {
@@ -1399,12 +1394,7 @@ export class Instance {
         binary = './bin/php5/bin/php';
       }
 
-      const pharFile = this.sc().java?.jarfile;
-      if (!pharFile) {
-        throw new Error('instance not assigned a runnable phar');
-      }
-
-      return ['-dmS', `mc-${this.name}`, binary, pharFile];
+      return ['-dmS', `mc-${this.name}`, binary, config.jarfile];
     };
 
     const cuberite = (): string[] => {
@@ -1418,9 +1408,9 @@ export class Instance {
     if (!jarfile) {
       throw new Error('Cannot start instance without a designated jar/phar');
     } else if (jarfile.slice(-4).toLowerCase() === '.jar') {
-      return jar(unconventional);
+      return jar(sc.java, unconventional);
     } else if (jarfile.slice(-5).toLowerCase() === '.phar') {
-      return phar();
+      return phar(sc.java);
     } else if (jarfile === 'Cuberite') {
       return cuberite();
     }
@@ -1451,20 +1441,24 @@ export class Instance {
    */
   async getJavaProcessStats(): Promise<procfs.Status> {
     const pids = Instance.listRunningInstancePids();
-    if (this.name in pids) {
-      return await new Promise((resolve, reject) => {
-        const ps = procfs(Number(pids[this.name].java));
-
-        ps.status((err, data) => {
-          if (err) {
-            reject(err);
-          }
-          resolve(data);
-        });
-      });
-    } else {
-      return Promise.reject();
+    if (!(this.name in pids)) {
+      return Promise.reject(`no processes running for ${this.name}`);
     }
+
+    const javaPid = pids[this.name].java;
+    if (!javaPid) {
+      return Promise.reject(`no java process running for ${this.name}`);
+    }
+
+    return await new Promise((resolve, reject) => {
+      const ps = procfs(javaPid);
+      ps.status((err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve(data);
+      });
+    });
   }
 
   /**
@@ -1537,15 +1531,12 @@ export class Instance {
    * @returns Whether or not this instance has accepted the Minecraft server EULA
    */
   async getEulaState(): Promise<boolean> {
-    return await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt')).then((data) => {
-      const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
-      const lines = data.toString().split('\n');
-      let matches = false;
-      for (const i in lines) {
-        if (lines[i].match(REGEX_EULA_TRUE)) matches = true;
-      }
-      return matches;
-    });
+    const REGEX_EULA_TRUE = /eula\s*=\s*true/i;
+    const data = await fs.promises.readFile(path.join(this.env.cwd, 'eula.txt'));
+    return data
+      .toString()
+      .split('\n')
+      .some((str) => str.match(REGEX_EULA_TRUE));
   }
 
   /**
@@ -1554,6 +1545,6 @@ export class Instance {
    * @returns True if FTBInstall.sh exists which indicates this is an FTB server, false otherwise
    */
   async isFTBServer(): Promise<boolean> {
-    return !!(await fs.promises.stat(path.join(this.env.cwd, 'FTBInstall.sh')));
+    return !!(await fs.promises.stat(path.join(this.env.cwd, 'FTBInstall.sh')).catch(() => false));
   }
 }

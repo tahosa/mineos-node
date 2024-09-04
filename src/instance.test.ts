@@ -17,6 +17,9 @@ jest.mock('du');
 import mcquery from 'mcquery';
 jest.mock('mcquery');
 
+import procfs from 'procfs-stats';
+jest.mock('procfs-stats');
+
 import { Tail } from 'tail';
 jest.mock('tail');
 
@@ -56,6 +59,14 @@ jest.mock('./auth-new', () => ({
 import { Instance } from './instance';
 
 describe('Instance', () => {
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick'] });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   describe('static', () => {
     afterEach(() => {
       jest.resetAllMocks();
@@ -492,24 +503,20 @@ describe('Instance', () => {
 
       test('should reject creation from archive if tar returns an error', async () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tgz');
+        await new Promise(process.nextTick);
 
-        await new Promise<void>((resolve) => {
-          setTimeout(() => {
-            mockChild.emit('exit', 1);
-            resolve();
-          }, 1);
-        });
+        mockChild.emit('exit', 1);
+        await new Promise(process.nextTick);
+
         await expect(() => promise).rejects.toBeTruthy();
       });
 
       test('should create an archive from a tar file at an absolute path', async () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, '/path/to/archive.tar');
-        await new Promise<void>((resolve) => {
-          setTimeout(() => {
-            mockChild.emit('exit');
-            resolve();
-          }, 1);
-        });
+        await new Promise(process.nextTick);
+
+        mockChild.emit('exit', 0);
+        await new Promise(process.nextTick);
 
         await promise;
 
@@ -527,12 +534,10 @@ describe('Instance', () => {
 
       test('should create an archive from a tar.gz file in the import directory', async () => {
         const promise = inst.createFromArchive({ uid: 1000, gid: 1000 }, 'archive.tar.gz');
-        await new Promise<void>((resolve) => {
-          setTimeout(() => {
-            mockChild.emit('exit');
-            resolve();
-          }, 1);
-        });
+        await new Promise(process.nextTick);
+
+        mockChild.emit('exit', 0);
+        await new Promise(process.nextTick);
 
         await promise;
 
@@ -854,14 +859,6 @@ describe('Instance', () => {
       describe('start', () => {
         let mockChild: EventEmitter;
 
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
         beforeEach(() => {
           jest.spyOn(inst, 'isUp').mockReturnValue(false);
           mockChild = new EventEmitter();
@@ -986,14 +983,6 @@ describe('Instance', () => {
       });
 
       describe('stop', () => {
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
         beforeEach(() => {
           jest.spyOn(inst, 'stuff').mockImplementation((command) => Promise.resolve(command));
         });
@@ -1042,14 +1031,6 @@ describe('Instance', () => {
       });
 
       describe('kill', () => {
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
         beforeEach(() => {
           // This function uses more than just the isUp() check, so this suite needs to mock the underlying feature
           jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 1000 } });
@@ -1150,14 +1131,6 @@ describe('Instance', () => {
       });
 
       describe('saveall', () => {
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
         beforeEach(() => {
           jest.spyOn(inst, 'stuff').mockReturnValue(Promise.resolve(''));
         });
@@ -1190,19 +1163,11 @@ describe('Instance', () => {
       });
 
       describe('saveallLatestLog', () => {
-        let mockTail;
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
+        let mockTail: EventEmitter & { unwatch?: () => void };
         beforeEach(() => {
           jest.spyOn(inst, 'stuff').mockReturnValue(Promise.resolve(''));
           mockTail = new EventEmitter();
-          (mockTail as any).unwatch = jest.fn();
+          mockTail.unwatch = jest.fn();
 
           Tail.mockReturnValue(mockTail);
         });
@@ -1253,7 +1218,7 @@ describe('Instance', () => {
     });
 
     describe('backup and archive functions', () => {
-      let mockChild: EventEmitter;
+      let mockChild: EventEmitter & { stdout? : EventEmitter };
 
       beforeAll(() => {
         jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
@@ -1452,7 +1417,7 @@ describe('Instance', () => {
 
         beforeEach(() => {
           mockStdout = new EventEmitter();
-          (mockChild as any).stdout = mockStdout;
+          mockChild.stdout = mockStdout;
         });
 
         test('should reject if rdiff-backup has an error', async () => {
@@ -1516,7 +1481,7 @@ Current Mirror: Mon Apr 30 00:00:00 2024
 
         beforeEach(() => {
           mockStdout = new EventEmitter();
-          (mockChild as any).stdout = mockStdout;
+          mockChild.stdout = mockStdout;
         });
 
         test('should reject if rdiff-backup has an error', async () => {
@@ -1586,7 +1551,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
         beforeEach(() => {
           jest
             .spyOn(fs.promises, 'readdir')
-            .mockReturnValue(Promise.resolve(['2024-01-01.tar.gz', '2024-02-02.tar.gz']) as any);
+            .mockReturnValue(Promise.resolve(['2024-01-01.tar.gz', '2024-02-02.tar.gz'] as any));
           jest.spyOn(fs.promises, 'stat').mockImplementation((file) => {
             return Promise.resolve({
               mtime: new Date(file.toString().split('/').slice(-1)[0].split('.')[0]),
@@ -1903,14 +1868,6 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
       });
 
       describe('du', () => {
-        beforeAll(() => {
-          jest.useFakeTimers({ doNotFake: ['nextTick'] });
-        });
-
-        afterAll(() => {
-          jest.useRealTimers();
-        });
-
         beforeEach(() => {
           (du as jest.Mock).mockImplementation((path, options, cb: any) => {
             cb(null, 1000);
@@ -2016,23 +1973,343 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
     });
 
     describe('properties', () => {
-      describe('exists', () => {});
+      describe('exists', () => {
+        test('should return false if stat has an error', async () => {
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.reject('error'));
+          expect(await inst.exists()).toEqual(false);
+        });
 
-      describe('isUp', () => {});
+        test('should return true if there is stat data for the server properties', async () => {
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({ uid: 1000, gid: 1000 } as Stats));
+          expect(await inst.exists()).toEqual(true);
+        });
+      });
 
-      describe('getStartArgs', () => {});
+      describe('isUp', () => {
+        test('should return false if there are no processes running for the instance', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server2: { java: 100, screen: 101 } });
+          expect(inst.isUp()).toEqual(false);
+        });
 
-      describe('getChildPid', () => {});
+        test('should return true if only a java process exists', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 100 } });
+          expect(inst.isUp()).toEqual(true);
+        });
 
-      describe('getJavaProcessStats', () => {});
+        test('should return true if only a screen process exists', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 101 } });
+          expect(inst.isUp()).toEqual(true);
+        });
 
-      describe('getRunnableJarFiles', () => {});
+        test('should return true if both java and screen processes exist', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 100, screen: 101 } });
+          expect(inst.isUp()).toEqual(true);
+        });
+      });
 
-      describe('getAutosaveState', () => {});
+      describe('getStartArgs', () => {
+        beforeEach(() => {
+          jest.spyOn(which, 'sync').mockReturnValue('/usr/bin/java');
+        });
 
-      describe('getEulaState', () => {});
+        test('should throw an error if the jarfile not specified', () => {
+          jest.spyOn(inst, 'sc').mockReturnValue({ java: {} } as ServerConfig);
+          expect(() => inst.getStartArgs()).toThrowError('Cannot start instance without a designated jar/phar');
+        });
 
-      describe('isFTBServer', () => {});
+        test('should throw an error if the jarfile is of an unknown type', () => {
+          jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'bad.txt' } } as ServerConfig);
+          expect(() => inst.getStartArgs()).toThrowError('unknown jar type bad.txt');
+        });
+
+        describe('jar server', () => {
+          test('should throw an error if no java binary is set', () => {
+            (which.sync as jest.Mock).mockReturnValue('');
+            jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'server.jar' } } as ServerConfig);
+            expect(() => inst.getStartArgs()).toThrowError('no java binary assigned for instance');
+          });
+
+          test('should throw an error if the Xmx heap max value is invalid', () => {
+            jest
+              .spyOn(inst, 'sc')
+              .mockReturnValue({ java: { jarfile: 'server.jar', java_xmx: '0' } } as unknown as ServerConfig);
+            expect(() => inst.getStartArgs()).toThrowError('Xmx heapsize must be a positive integer > 0');
+          });
+
+          test('should throw an error if the Xms heap min value is invalid', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({
+              java: { jarfile: 'server.jar', java_xmx: '10', java_xms: '-1' },
+            } as unknown as ServerConfig);
+            expect(() => inst.getStartArgs()).toThrowError(
+              'Xms heapsize must be a positive integer where Xmx >= Xms >= 0'
+            );
+          });
+
+          test('should throw an error if the Xms heap min value is larger than Xmx', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({
+              java: { jarfile: 'server.jar', java_xmx: '10', java_xms: '20' },
+            } as unknown as ServerConfig);
+            expect(() => inst.getStartArgs()).toThrowError(
+              'Xms heapsize must be a positive integer where Xmx >= Xms >= 0'
+            );
+          });
+
+          test('should add the forge install command for forge servers', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({
+              java: { jarfile: 'forge-installer.jar', java_xmx: '10', java_xms: '5' },
+            } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual([
+              '-dmS',
+              'mc-server1',
+              '/usr/bin/java',
+              '-server',
+              '-Xmx10M',
+              '-Xms5M',
+              '-jar',
+              'forge-installer.jar',
+              '--installServer',
+            ]);
+          });
+
+          test('should not treat unconventional servers as forge servers', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({
+              java: { jarfile: 'forge-installer.jar', java_xmx: '10', java_xms: '5' },
+              minecraft: { unconventional: true },
+            } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual([
+              '-dmS',
+              'mc-server1',
+              '/usr/bin/java',
+              '-server',
+              '-Xmx10M',
+              '-Xms5M',
+              '-jar',
+              'forge-installer.jar',
+            ]);
+          });
+
+          test('should return the complete set of of arguments for the java process', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({
+              java: {
+                java_binary: '/opt/alternatives/java/openjdk-21/bin/java',
+                jarfile: 'server.jar',
+                java_xmx: '10',
+                java_xms: '5',
+                jar_args: '--arg1 --arg2',
+                java_tweaks: '-tweak1 -tweak2',
+              },
+            } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual([
+              '-dmS',
+              'mc-server1',
+              '/opt/alternatives/java/openjdk-21/bin/java',
+              '-server',
+              '-Xmx10M',
+              '-Xms5M',
+              '-tweak1',
+              '-tweak2',
+              '-jar',
+              'server.jar',
+              '--arg1',
+              '--arg2',
+            ]);
+          });
+
+          test('should use sensible defaults for optional arguments', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'server.jar' } } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual(['-dmS', 'mc-server1', '/usr/bin/java', '-server', '-Xmx256M', '-jar', 'server.jar']);
+          });
+        });
+
+        describe('phar server', () => {
+          test('should use PHP7 if it is available', () => {
+            jest.spyOn(fsExtra, 'accessSync').mockImplementation(() => {});
+            jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'server.phar' } } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual(['-dmS', 'mc-server1', './bin/php7/bin/php', 'server.phar']);
+          });
+
+          test('should use PHP5 if PHP7 is not available', () => {
+            jest.spyOn(fsExtra, 'accessSync').mockImplementation(() => {
+              throw new Error('error');
+            });
+            jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'server.phar' } } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual(['-dmS', 'mc-server1', './bin/php5/bin/php', 'server.phar']);
+          });
+        });
+
+        describe('cuberite server', () => {
+          test('should invoke the Cuberite binary directly', () => {
+            jest.spyOn(inst, 'sc').mockReturnValue({ java: { jarfile: 'Cuberite' } } as unknown as ServerConfig);
+            const args = inst.getStartArgs();
+            expect(args).toEqual(['-dmS', 'mc-server1', './Cuberite']);
+          });
+        });
+      });
+
+      describe('getChildPid', () => {
+        test('should return the java process number if one exists', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 101 } });
+          expect(inst.getChildPid('java')).toEqual(101);
+        });
+
+        test('should return undefined for the java process if it is not found', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: {} });
+          expect(inst.getChildPid('java')).toBeUndefined();
+        });
+
+        test('should return the screen process number if one exists', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { screen: 100 } });
+          expect(inst.getChildPid('screen')).toEqual(100);
+        });
+
+        test('should return undefined for the screen process if it is not found', () => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: {} });
+          expect(inst.getChildPid('screen')).toBeUndefined();
+        });
+      });
+
+      describe('getJavaProcessStats', () => {
+        beforeEach(() => {
+          jest.spyOn(Instance, 'listRunningInstancePids').mockReturnValue({ server1: { java: 101 } });
+        });
+
+        test('should reject if no processs are running for this instance', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({});
+          await expect(() => inst.getJavaProcessStats()).rejects.toBeTruthy();
+        });
+
+        test('should reject if the java process for this instance is not running', async () => {
+          (Instance.listRunningInstancePids as jest.Mock).mockReturnValue({ server1: { screen: 100 } });
+          await expect(() => inst.getJavaProcessStats()).rejects.toBeTruthy();
+        });
+
+        test('should reject if procfs has an error', async () => {
+          const mockProcfs = {
+            status: jest.fn().mockImplementation((cb: any) => {
+              cb(new Error('error'));
+            }),
+          };
+          (procfs as unknown as jest.Mock).mockImplementation(() => mockProcfs);
+          await expect(() => inst.getJavaProcessStats()).rejects.toBeTruthy();
+        });
+
+        test('should return the process stats for the java process', async () => {
+          const mockProcfs = {
+            status: jest.fn().mockImplementation((cb: any) => {
+              cb(null, { data: 'value' });
+            }),
+          };
+          (procfs as unknown as jest.Mock).mockImplementation(() => mockProcfs);
+          const result = await inst.getJavaProcessStats();
+
+          expect(result).toEqual({ data: 'value' });
+        });
+      });
+
+      describe('getRunnableJarFiles', () => {
+        beforeEach(() => {
+          jest.spyOn(inst, 'sc').mockReturnValue({ minecraft: { profile: 'profile1' } } as ServerConfig);
+        });
+
+        test('should reject if reading any of the dirs has an error', async () => {
+          jest.spyOn(fs.promises, 'readdir').mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.getRunnableJarFiles()).rejects.toBeTruthy();
+        });
+
+        test('should return the list of files in the instance directory combined with the list from the profile directory', async () => {
+          jest
+            .spyOn(fs.promises, 'readdir')
+            .mockReturnValueOnce(Promise.resolve(['java.jar', 'php.phar', 'Cuberite'] as any));
+          jest
+            .spyOn(fs.promises, 'readdir')
+            .mockReturnValueOnce(Promise.resolve(['java-profile.jar', 'php-profile.phar'] as any));
+
+          const result = await inst.getRunnableJarFiles();
+          expect(result).toEqual(['java.jar', 'php.phar', 'Cuberite', 'java-profile.jar', 'php-profile.phar']);
+        });
+      });
+
+      describe('getAutosaveState', () => {
+        let mockTail: EventEmitter & { unwatch?: () => void };
+        beforeEach(() => {
+          jest.spyOn(inst, 'stuff').mockReturnValue(Promise.resolve(''));
+          mockTail = new EventEmitter();
+          mockTail.unwatch = jest.fn();
+
+          Tail.mockReturnValue(mockTail);
+        });
+
+        test('should resolve true if no log message is seen before the timeout to support legacy servers', async () => {
+          const promise = inst.getAutosaveState();
+          await new Promise(process.nextTick);
+
+          jest.advanceTimersByTime(2000);
+          await new Promise(process.nextTick);
+
+          expect(await promise).toEqual(true);
+          expect(mockTail.unwatch).toHaveBeenCalled();
+        });
+
+        test('should resolve true if auto-save is on', async () => {
+          const promise = inst.getAutosaveState();
+          await new Promise(process.nextTick);
+
+          mockTail.emit('line', '[INFO]: Saving is already turned on');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          expect(await promise).toEqual(true);
+          expect(mockTail.unwatch).toHaveBeenCalled();
+        });
+
+        test('should resolve false if auto-save is off', async () => {
+          const promise = inst.getAutosaveState();
+          await new Promise(process.nextTick);
+
+          mockTail.emit('line', '[INFO]: Turned on world auto-saving');
+          jest.advanceTimersByTime(1000);
+          await new Promise(process.nextTick);
+
+          expect(await promise).toEqual(false);
+          expect(mockTail.unwatch).toHaveBeenCalled();
+          expect(inst.stuff).toHaveBeenCalledWith('save-off');
+        });
+      });
+
+      describe('getEulaState', () => {
+        test('should reject if there is an error reading the EULA file', async () => {
+          jest.spyOn(fs.promises, 'readFile').mockReturnValue(Promise.reject('error'));
+          await expect(() => inst.getEulaState()).rejects.toBeTruthy();
+        });
+
+        test('should resolve false if the eula has not been accepted', async () => {
+          jest.spyOn(fs.promises, 'readFile').mockReturnValue(Promise.resolve(Buffer.from('eula\ntrue\n')));
+          expect(await inst.getEulaState()).toEqual(false);
+        });
+
+        test('should resolve true if the eula has been accepted', async () => {
+          jest.spyOn(fs.promises, 'readFile').mockReturnValue(Promise.resolve(Buffer.from('\neula=true\n')));
+          expect(await inst.getEulaState()).toEqual(true);
+        });
+      });
+
+      describe('isFTBServer', () => {
+        test('should resolve false if stat has an error', async () => {
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.reject('error'));
+          expect(await inst.isFTBServer()).toEqual(false);
+        });
+
+        test('should resolve true if stat data is returned for the FTB install script', async () => {
+          jest.spyOn(fs.promises, 'stat').mockReturnValue(Promise.resolve({} as Stats));
+          expect(await inst.isFTBServer()).toEqual(true);
+        });
+      });
     });
   });
 });
