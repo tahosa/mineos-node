@@ -1,23 +1,14 @@
-import { FlatCompat } from '@eslint/eslintrc';
-import pluginJs from '@eslint/js';
+import eslint from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
-import eslintImport from 'eslint-plugin-import';
-import globals from 'globals';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-// For some reason eslint can't see this, but it works
-// eslint-disable-next-line import/no-unresolved
-import eslintTypescript from 'typescript-eslint';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import tseslint from 'typescript-eslint';
 
 const config = {
+  languageOptions: {
+    parserOptions: {
+      project: true,
+      tsconfigRootDir: import.meta.dirname
+    }
+  },
   rules: {
     '@typescript-eslint/no-explicit-any': 'off',
     quotes: ['error', 'single'],
@@ -34,13 +25,10 @@ const config = {
 export default [
   {
     files: ['**/*.ts'],
-    ignores: ['html/**', 'dist/**', 'src/profiles.d/template.ts'],
-    languageOptions: { globals: globals.browser },
+    ignores: ['coverage/**', 'html/**', 'dist/**', 'src/profiles.d/template.ts'],
   },
-  pluginJs.configs.recommended,
-  ...eslintTypescript.configs.recommended,
+  eslint.configs.recommended,
+  ...tseslint.configs.recommended,
   eslintConfigPrettier,
-  ...compat.config(eslintImport.configs.recommended),
-  ...compat.config(eslintImport.configs.typescript),
   config,
 ];

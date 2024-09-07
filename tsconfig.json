@@ -16,7 +16,10 @@
     "noImplicitAny": false,
 
     "allowJs": true,
-    "noEmit": true
+    "noEmit": true,
+    "noImplicitReturns": true,
+    "sourceMap": true,
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "**/*.mjs"],
+  "exclude": ["node_modules"]
 }
