@@ -86,8 +86,9 @@ export const server_pids_up = () => {
   let cmdline, environ;
   const pids = fs.readdirSync(PROC_PATH).filter((e) => {
     if (/^([0-9]+)$/.test(e)) {
-      return e;
+      return true;
     }
+    return false;
   });
   const SCREEN_REGEX = /screen[^S]+S mc-([^\s]+)/i;
   const JAVA_REGEX = /\.mc-([^\s]+)/i;

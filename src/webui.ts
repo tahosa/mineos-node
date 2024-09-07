@@ -8,16 +8,15 @@ import express from 'express';
 import compression from 'compression';
 import passport from 'passport';
 import LocalStrategy from 'passport-local';
-import passportSocketIO from 'passport.socketio';
 import expressSession from 'express-session';
 import bodyParser from 'body-parser';
 import methodOverride from 'method-override';
-import cookieParser from 'cookie-parser';
+//import cookieParser from 'cookie-parser';
 import token from 'crypto';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
-import socket from 'socket.io';
+import { Server } from 'socket.io';
 
 import auth from './auth';
 import { checkDependencies } from './mineos';
@@ -121,31 +120,29 @@ function ensureAuthenticated(req, res, next) {
 }
 
 const secret = token.randomBytes(48).toString('hex');
+const sessionMiddleware = expressSession({
+  secret,
+  name: 'express.sid',
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+});
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(methodOverride());
 app.use(compression());
-app.use(
-  expressSession({
-    secret,
-    name: 'express.sid',
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-  })
-);
+app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-const io = socket(httpServer);
-io.use(
-  passportSocketIO.authorize({
-    cookieParser: cookieParser, // the same middleware you registrer in express
-    key: 'express.sid', // the name of the cookie where express/connect stores its session_id
-    secret, // the session_secret to parse the cookie
-    store: sessionStore, // we NEED to use a sessionstore. no memorystore please
-  })
-);
+const io = new Server(httpServer);
+
+// https://github.com/socketio/socket.io/blob/master/examples/passport-example/index.js#L76-L80//
+// Convert connect middlware to Socket.IO middleware
+const wrap = (middleware) => (socket, next) => middleware(socket.request, {}, next);
+io.use(wrap(sessionMiddleware));
+io.use(wrap(passport.initialize()));
+io.use(wrap(passport.session()));
 
 try {
   checkDependencies();

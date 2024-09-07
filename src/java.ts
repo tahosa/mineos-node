@@ -1,12 +1,14 @@
 import child from 'child_process';
 import which from 'which';
 
-export async function usedJavaVersion(sc) {
+import { type ServerConfig } from './constants';
+
+export async function usedJavaVersion(sc: ServerConfig): Promise<string> {
   return await new Promise((res, rej) => {
-    let value;
+    let value = 'unknown';
     try {
       const java_binary = which.sync('java');
-      value = (sc.java || {}).java_binary || java_binary;
+      value = sc.java?.java_binary || java_binary;
 
       const java_version = child.spawnSync(`${value}`, ['-version']);
 

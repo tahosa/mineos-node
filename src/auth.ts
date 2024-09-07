@@ -2,7 +2,7 @@ import async from 'async';
 import crypt from 'apache-crypt';
 import fs from 'fs-extra';
 import hash from 'sha512crypt-node';
-import nodePosix from 'posix';
+import nodePosix from '@ilb/posix';
 import passwd from 'etc-passwd';
 import userid from 'userid';
 

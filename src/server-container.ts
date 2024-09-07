@@ -837,7 +837,7 @@ export class ServerContainer {
         case 'delete':
           this.logger.info('requests cron deletion', opts.hash);
 
-          if(opts.hash && opts.hash in this.sup.cron) {
+          if (opts.hash && opts.hash in this.sup.cron) {
             this.sup.cron[opts.hash].stop();
             delete this.sup.cron[opts.hash];
 

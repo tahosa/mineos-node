@@ -35,6 +35,7 @@ const mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   log: jest.fn(),
+  child: () => mockLogger,
 };
 
 jest.mock('./lib/logger', () => ({
@@ -1169,7 +1170,7 @@ describe('Instance', () => {
           mockTail = new EventEmitter();
           mockTail.unwatch = jest.fn();
 
-          Tail.mockReturnValue(mockTail);
+          (Tail as jest.Mock).mockReturnValue(mockTail);
         });
 
         test('should reject if the instance does not exist', async () => {
@@ -1183,7 +1184,7 @@ describe('Instance', () => {
         });
 
         test('should reject if the tail cannot be started', async () => {
-          Tail.mockImplementation(() => {
+          (Tail as jest.Mock).mockImplementation(() => {
             throw new Error('error');
           });
           await expect(() => inst.saveallLatestLog()).rejects.toBeTruthy();
@@ -1218,7 +1219,7 @@ describe('Instance', () => {
     });
 
     describe('backup and archive functions', () => {
-      let mockChild: EventEmitter & { stdout? : EventEmitter };
+      let mockChild: EventEmitter & { stdout?: EventEmitter };
 
       beforeAll(() => {
         jest.spyOn(which, 'sync').mockImplementation((cmd) => `/usr/bin/${cmd}`);
@@ -2242,7 +2243,7 @@ Fri Mar  1 00:00:00 2024        6.95 MB          18.2 MB
           mockTail = new EventEmitter();
           mockTail.unwatch = jest.fn();
 
-          Tail.mockReturnValue(mockTail);
+          (Tail as jest.Mock).mockReturnValue(mockTail);
         });
 
         test('should resolve true if no log message is seen before the timeout to support legacy servers', async () => {

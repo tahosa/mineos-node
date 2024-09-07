@@ -1,7 +1,9 @@
-import type profile from './profiles.d/template';
-import { type collection } from './profiles.d/template';
+import type { Request } from 'express';
 
-import Socket from 'socket.io';
+import type profile from './profiles.d/template';
+import type { collection } from './profiles.d/template';
+
+import { type Server } from 'socket.io';
 import axios from 'axios';
 import async from 'async';
 import path from 'node:path';
@@ -49,10 +51,10 @@ export default class server {
   base_dir: string;
   servers = {};
   profiles: profile[] = [];
-  front_end: Socket;
+  front_end: Server;
   commit_msg = '';
 
-  constructor(base_dir: string, socket_emitter: Socket, user_config: { creators?: string }) {
+  constructor(base_dir: string, socket_emitter: Server, user_config: { creators?: string }) {
     this.base_dir = base_dir;
     this.servers = {};
     this.profiles = [];
@@ -181,6 +183,7 @@ export default class server {
             return fs.statSync(path.join(server_path, p)).isDirectory();
           } catch (e) {
             logging.warn(`Filepath ${path.join(server_path, p)} does not point to an existing directory`);
+            return false;
           }
         });
       };
@@ -242,8 +245,9 @@ export default class server {
     }, 5000);
 
     this.front_end.on('connection', (socket) => {
-      const ip_address = socket.request.connection.remoteAddress;
-      const username = socket.request.user.username;
+      const ip_address = socket.conn.remoteAddress;
+      const req = socket.request as Request & { user: Express.User };
+      const username = req.user.username;
 
       const OWNER_CREDS = {
         uid: userid.uid(username),
@@ -992,7 +996,7 @@ export class server_container {
         for (const cronhash in cron_dict) {
           if (cron_dict[cronhash].enabled) {
             try {
-              this.cron[cronhash] = new CronJob({
+              this.cron[cronhash] = CronJob.from({
                 cronTime: cron_dict[cronhash].source,
                 onTick: () => {
                   cron_dispatcher(this);
@@ -1231,10 +1235,10 @@ export class server_container {
             for (const cronhash in cron_dict) {
               if (cron_dict[cronhash].enabled) {
                 try {
-                  this.cron[cronhash] = new CronJob({
+                  this.cron[cronhash] = CronJob.from({
                     cronTime: cron_dict[cronhash].source,
                     onTick: () => {
-                      server_dispatcher(this);
+                      server_dispatcher(cron_dict[cronhash]);
                     },
                     start: true,
                     context: cron_dict[cronhash],

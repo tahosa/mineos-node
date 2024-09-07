@@ -41,6 +41,7 @@ for (const proc in procPaths) {
 
 type MemoKeys = 'server.properties' | 'server.config';
 type EnvKeys = 'baseDir' | 'cwd' | 'bwd' | 'awd' | 'pwd' | 'sp' | 'sc' | 'cc';
+
 type QueryResponse = {
   protocol?: number;
   serverVersion: string;
@@ -48,16 +49,55 @@ type QueryResponse = {
   playersOnline: number;
   playersMax: number;
 };
+
 type IncrementListItem = {
   step: string;
   time: string;
   size: string;
   cum: string;
 };
+
 type ArchiveListItem = {
   time: Date;
   size: number;
   filename: string;
+};
+
+export type Properties =
+  | 'owner'
+  | 'owner_uid'
+  | 'owner_gid'
+  | 'exists'
+  | '!exists'
+  | 'up'
+  | '!up'
+  | 'java_pid'
+  | 'screen_pid'
+  | 'server-port'
+  | 'server-ip'
+  | 'memory'
+  | 'ping'
+  | 'query'
+  | 'server.properties'
+  | 'server.config'
+  | 'du_awd'
+  | 'du_bwd'
+  | 'du_cwd'
+  | 'broadcast'
+  | 'onreboot_start'
+  | 'unconventional'
+  | 'commit_interval'
+  | 'eula'
+  | 'server_files'
+  | 'autosave'
+  | 'FTBInstall.sh'
+  | 'java_version_in_use';
+
+export type OwnerData = {
+  uid: number;
+  gid: number;
+  username: string;
+  groupname: string;
 };
 
 export class Instance {
@@ -65,8 +105,10 @@ export class Instance {
   env: { [key in EnvKeys]: string };
   memoFiles: { [key in MemoKeys]?: ReturnType<typeof memoize> } = {};
   timestamps: { [key in MemoKeys]?: number } = {};
+  logger: typeof Logger;
 
   constructor(name: string, baseDir: string) {
+    this.logger = logger.child({ instance: name });
     this.name = name;
     this.env = {
       baseDir,
@@ -115,8 +157,9 @@ export class Instance {
     // Get all running process PIDs from system process directory
     const pids = fs.readdirSync(PROC_PATH).filter((e) => {
       if (/^([0-9]+)$/.test(e)) {
-        return e;
+        return true;
       }
+      return false;
     });
 
     for (let i = 0; i < pids.length; i++) {
@@ -326,7 +369,7 @@ export class Instance {
     const currentCron = this.crons();
 
     if (!(identifier in currentCron)) {
-      logger.warn(`cannot enable cron job ${identifier} because it does not exist for instance ${this.name}`);
+      this.logger.warn(`cannot enable cron job ${identifier} because it does not exist for instance ${this.name}`);
       return currentCron;
     }
 
@@ -583,8 +626,8 @@ export class Instance {
         });
 
         socket.on('error', (err) => {
-          logger.error(`ping: MC Server ${this.name} not available on port ${port}`);
-          //logger.debug('error', err);}
+          this.logger.error(`ping: MC Server ${this.name} not available on port ${port}`);
+          //this.logger.debug('error', err);}
           reject(err);
         });
 
@@ -849,7 +892,7 @@ export class Instance {
         await this.saveallLatestLog();
       } catch (e) {
         // We can still archive if the server isn't running
-        logger.warn(`could not force save ${this.name} before archiving:`, e);
+        this.logger.warn(`could not force save ${this.name} before archiving:`, e);
       }
     }
 
@@ -1146,7 +1189,7 @@ export class Instance {
    *
    * @returns Owner and group information for this instance
    */
-  async getOwner(): Promise<{ uid: number; gid: number; username: string; groupname: string }> {
+  async getOwner(): Promise<OwnerData> {
     const statData = await fs.promises.stat(this.env.cwd);
     return {
       uid: statData.uid,

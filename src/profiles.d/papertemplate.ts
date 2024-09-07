@@ -28,7 +28,8 @@ export default (name) => {
               url: `https://papermc.io/api/v2/projects/${lowername}/versions/${version}/`,
             }).catch((err) => {
               console.error(err);
-            }) as Promise<string>
+              return '';
+            })
           );
         }
         return Promise.all(paperVersions).then((responses) => {
@@ -58,6 +59,7 @@ export default (name) => {
         });
       } catch (e) {
         console.log(e);
+        return [];
       }
     }, //end handler
   } as collection;
