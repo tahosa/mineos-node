@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { Server, Namespace, Socket } from 'socket.io';
 
 import { CronJob } from 'cron';
 import { Fireworm } from 'fireworm';
@@ -8,7 +9,6 @@ import { randomUUID } from 'node:crypto';
 import { constants as FS_CONST } from 'node:fs';
 import path from 'node:path';
 import hash from 'object-hash';
-import { Server, Namespace, type Socket } from 'socket.io';
 import { Tail } from 'tail';
 
 import { Logger } from './lib/logger';
@@ -20,7 +20,7 @@ import { CronTask } from './constants';
 
 const logger = Logger.child({ service: 'server-container' });
 
-const defaultSkips = [
+const DEFAULT_SKIPS = [
   'world',
   'world_the_end',
   'world_nether',
@@ -37,13 +37,13 @@ const HEARTBEAT_INTERVAL_MS = 5000;
 const FILESIZE_LIMIT_THRESHOLD = 256000;
 const NOTICES_QUEUE_LENGTH = 10; // 0 < q <= 10
 
-type ServerContainerConfig = {
+export type ServerContainerConfig = {
   baseDir: string;
   additionalLogs: string;
 };
 
 type IntervalKeys = 'heartbeat' | 'checkWorldCommitInterval' | 'commit';
-type DispatchCommand = { command: keyof Instance; [key: string]: any };
+export type DispatchCommand = { command: keyof Instance; [key: string]: any };
 
 /**
  * Wrapper for managing a single Instance through socket-based interactions
@@ -169,7 +169,7 @@ export class ServerContainer {
         }
 
         const watch = Fireworm(this.instance.env.cwd, {
-          skipDirEntryPatterns: defaultSkips,
+          skipDirEntryPatterns: DEFAULT_SKIPS,
         });
 
         watch.add(`**/${filename}`);
@@ -206,7 +206,7 @@ export class ServerContainer {
    */
   createConfigWatchers(): void {
     const skipDirs = new Set([
-      ...defaultSkips,
+      ...DEFAULT_SKIPS,
       ...fs.readdirSync(this.instance.env.cwd, { withFileTypes: true }).filter((p) => p.isDirectory()),
     ]);
     this.logger.info('using skipDirEntryPatterns: ', skipDirs);

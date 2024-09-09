@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 
-import type profile from './profiles.d/template';
-import type { collection } from './profiles.d/template';
+import type Profile from './profiles.d/template';
+import type { Collection } from './profiles.d/template';
 
 import { type Server } from 'socket.io';
 import axios from 'axios';
@@ -36,7 +36,7 @@ import mineos, { DIRS } from './mineos';
 import PROFILES from './profiles';
 import { PromisePool } from './lib/util';
 
-const SOURCES = PROFILES.profile_manifests;
+const SOURCES = PROFILES.PROFILES;
 const F_OK = constants.F_OK;
 
 logging.add(
@@ -50,7 +50,7 @@ logging.add(
 export default class server {
   base_dir: string;
   servers = {};
-  profiles: profile[] = [];
+  profiles: Profile[] = [];
   front_end: Server;
   commit_msg = '';
 
@@ -645,12 +645,12 @@ export default class server {
       this.front_end.emit('profile_list', this.profiles);
     else {
       const profile_dir = path.join(this.base_dir, DIRS['profiles']);
-      const pool = new PromisePool<profile[], [string, collection]>(
+      const pool = new PromisePool<Profile[], [string, Collection]>(
         Object.entries(SOURCES),
         3,
         async ([name, profile]) => {
           try {
-            let output: profile[] = [];
+            let output: Profile[] = [];
             if (profile.request_args) {
               const response = await axios.get(profile.request_args.url, {
                 responseType: profile.request_args.type,
