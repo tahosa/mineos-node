@@ -7,7 +7,7 @@ import { type Collection } from './profiles.d/template';
 import admzip from 'adm-zip';
 import { check } from 'diskusage';
 import passwd from 'etc-passwd';
-import { Fireworm } from 'fireworm';
+import Fireworm from 'fireworm';
 import fs from 'fs-extra';
 import child from 'node:child_process';
 import dgram from 'node:dgram';
@@ -115,13 +115,13 @@ export default class Server {
 
     this.startBroadcasts();
 
-    setInterval(this.getHostDiskspace, HOST_DU_HEARTBEAT_DELAY_MS);
-    setInterval(this.getHostHeartbeat, HOST_HEARTBEAT_DELAY_MS);
+    setInterval(() => { this.getHostDiskspace() }, HOST_DU_HEARTBEAT_DELAY_MS);
+    setInterval(() => { this.getHostHeartbeat() }, HOST_HEARTBEAT_DELAY_MS);
 
     this.startTracking(config);
     this.startImportWatch();
 
-    setTimeout(this.startServers, 5000);
+    setTimeout(() => { this.startServers() }, 5000);
 
     this.socket.on('connect', (conn) => {
       const connection = new this.Connection(this, conn);
@@ -157,7 +157,7 @@ export default class Server {
 
     const broadcast = async () => {
       Object.values(this.instances).forEach(async (container) => {
-        const [msg, ip] = await container.broadcastToLan();
+        const [msg, ip] = await container.broadcastToLan().catch(() => []);
         if (msg) {
           if (broadcasts[ip]) {
             broadcasts[ip].send(msg, UDP_PORT, UDP_DEST);
@@ -178,7 +178,7 @@ export default class Server {
         }
       });
     };
-    setInterval(broadcast, BROADCAST_DELAY_MS);
+    setInterval(() => { broadcast() }, BROADCAST_DELAY_MS);
   }
 
   /**

@@ -18,10 +18,13 @@ import https from 'node:https';
 import path from 'node:path';
 import { Server } from 'socket.io';
 
+import { readIni } from './lib/util';
+import { Logger } from './lib/logger';
 import auth from './auth';
 import { checkDependencies } from './mineos';
-import { readIni } from './lib/util';
-import server from './server';
+import Mineos from './server-new';
+
+const logger = Logger.child({ service: 'webui' });
 
 let SOCKET_PORT: number = 8080;
 
@@ -50,12 +53,12 @@ const localAuth = (username, password) =>
 
 // Passport init
 passport.serializeUser((user, done) => {
-  //console.log("serializing " + user.username);
+  //logger.log("serializing " + user.username);
   done(null, user);
 });
 
 passport.deserializeUser((obj: any, done) => {
-  //console.log("deserializing " + obj);
+  //logger.log("deserializing " + obj);
   done(null, obj);
 });
 
@@ -68,28 +71,28 @@ passport.use(
       localAuth(username, password)
         .then((user) => {
           if (user) {
-            console.log('Successful login attempt for username:', username);
+            logger.log('Successful login attempt for username:', username);
             const logstring =
               new Date().toString() + ' - success from: ' + req.connection.remoteAddress + ' user: ' + username + '\n';
             try {
               fs.appendFileSync('/var/log/mineos.auth.log', logstring);
             } catch (e) {
-              console.log(e);
-              console.log('Appending to local repo copy instead: ./mineos.auth.log');
+              logger.error(e);
+              logger.info('Appending to local repo copy instead: ./mineos.auth.log');
               fs.appendFileSync('mineos.auth.log', logstring);
             }
             done(null, user);
           }
         })
         .catch(() => {
-          console.log('Unsuccessful login attempt for username:', username);
+          logger.log('Unsuccessful login attempt for username:', username);
           const logstring =
             new Date().toString() + ' - failure from: ' + req.connection.remoteAddress + ' user: ' + username + '\n';
           try {
             fs.appendFileSync('/var/log/mineos.auth.log', logstring);
           } catch (e) {
-            console.log(e);
-            console.log('Appending to local repo copy instead: ./mineos.auth.log');
+            logger.error(e);
+            logger.info('Appending to local repo copy instead: ./mineos.auth.log');
             fs.appendFileSync('mineos.auth.log', logstring);
           }
           done(null);
@@ -147,25 +150,25 @@ io.use(wrap(passport.session()));
 try {
   checkDependencies();
 } catch (err) {
-  console.error('MineOS is missing dependencies:', err);
+  logger.error('MineOS is missing dependencies:', err);
   process.exit(1);
 }
 
-const config_locs = ['custom.conf', './mineos.conf', '/etc/mineos.conf', '/usr/local/etc/mineos.conf'];
+const config_locs = ['custom.conf', './mineos.conf', '../mineos.conf', '/etc/mineos.conf', '/usr/local/etc/mineos.conf'];
 
 let mineos_config;
 if (typeof config_file !== 'undefined') {
-  console.info('using command-line provided configuration identified as', config_file);
+  logger.info('using command-line provided configuration identified as', config_file);
   mineos_config = readIni(config_file);
 } else {
   for (const loc in config_locs) {
     try {
       fs.statSync(config_locs[loc]);
-      console.info('first mineos configuration identified as', config_locs[loc]);
+      logger.info(`first mineos configuration identified as ${config_locs[loc]}`);
       mineos_config = readIni(config_locs[loc]);
       break;
     } catch (e) {
-      console.error(e);
+      logger.warn(e);
     }
   }
 }
@@ -179,18 +182,18 @@ if ('base_directory' in mineos_config) {
     base_directory = mineos_config['base_directory'];
     fs.ensureDirSync(base_directory);
   } catch (e) {
-    console.error(e, 'Aborting startup.');
+    logger.error('Aborting startup.', e);
     process.exit(2);
   }
-  console.info('using base_directory: ', base_directory);
+  logger.info(`using base_directory: ${base_directory}`);
 } else {
-  console.error('base_directory not specified--missing mineos.conf?');
-  console.error('alternatively, you can make custom.conf in the repository root directory');
-  console.error('Aborting startup.');
+  logger.error('base_directory not specified--missing mineos.conf?');
+  logger.error('alternatively, you can make custom.conf in the repository root directory');
+  logger.error('Aborting startup.');
   process.exit(4);
 }
 
-const be = new server(base_directory, io, mineos_config);
+const be = new Mineos(base_directory, io, mineos_config);
 
 app.get('/', (req, res) => {
   res.redirect('/admin/index.html');
@@ -215,24 +218,24 @@ app.post(
 app.all('/api/:server_name/:command', ensureAuthenticated, (req, res) => {
   const target_server = req.params.server_name;
   const user = (req.user as any).username;
-  const instance = be.servers[target_server];
+  const instance = be.instances[target_server];
 
   const args = req.body;
   args['command'] = req.params.command;
 
-  if (instance) instance.direct_dispatch(user, args);
-  else console.error('Ignoring request by "', user, '"; no server found named [', target_server, ']');
+  if (instance) instance.directDispatch(user, args);
+  else logger.error('Ignoring request by "', user, '"; no server found named [', target_server, ']');
 
   res.end();
 });
 
 app.post('/admin/command', ensureAuthenticated, (req, res) => {
   const target_server = req.body.server_name;
-  const instance = be.servers[target_server];
+  const instance = be.instances[target_server];
   const user = (req.user as any).username;
 
-  if (instance) instance.direct_dispatch(user, req.body);
-  else console.error('Ignoring request by "', user, '"; no server found named [', target_server, ']');
+  if (instance) instance.directDispatch(user, req.body);
+  else logger.error('Ignoring request by "', user, '"; no server found named [', target_server, ']');
 
   res.end();
 });
@@ -252,7 +255,7 @@ app.use('/angular-sanitize', express.static(__dirname + '/../node_modules/angula
 app.use('/admin', express.static(__dirname + '/../html'));
 
 process.on('SIGINT', () => {
-  console.log('Caught interrupt signal; closing webui....');
+  logger.info('Caught interrupt signal; closing webui....');
   be.shutdown();
   process.exit();
 });
@@ -278,7 +281,7 @@ if (USE_HTTPS) {
     },
     (err, ssl) => {
       if (err) {
-        console.error(
+        logger.error(
           'Could not locate required SSL files ' + keyfile + ' and/or ' + certfile + ', aborting server start.'
         );
         process.exit(3);
@@ -288,21 +291,21 @@ if (USE_HTTPS) {
             const cert_chain_data = fs.readFileSync(mineos_config['ssl_cert_chain']);
             if (cert_chain_data.length) ssl['ca'] = cert_chain_data;
           } catch (e) {
-            console.error(e);
+            logger.error(e);
           }
         }
 
         httpServer = https.createServer(ssl, app).listen(SOCKET_PORT, SOCKET_HOST, () => {
           io.attach(httpServer, {});
-          console.log('MineOS webui listening on HTTPS://' + SOCKET_HOST + ':' + SOCKET_PORT);
+          logger.info('MineOS webui listening on HTTPS://' + SOCKET_HOST + ':' + SOCKET_PORT);
         });
       }
     }
   );
 } else {
-  console.warn('mineos.conf set to host insecurely: starting HTTP server.');
+  logger.warn('mineos.conf set to host insecurely: starting HTTP server.');
   httpServer.listen(SOCKET_PORT, SOCKET_HOST, () => {
-    console.log('MineOS webui listening on HTTP://' + SOCKET_HOST + ':' + SOCKET_PORT);
+    logger.info('MineOS webui listening on HTTP://' + SOCKET_HOST + ':' + SOCKET_PORT);
   });
 }
 
@@ -310,16 +313,15 @@ setInterval(session_cleanup, 3600000); //check for expired sessions every hour
 
 process.on('uncaughtExceptionMonitor', (err) => {
   // Monitor but allow unhandled excaptions to fall through
-  console.error(`Uncaught Exception: ${err}`);
-  console.error(err.stack);
-  process.exit(1);
+  logger.error('Uncaught Exception', err);
+  //process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection', { promise, reason });
   process.exit(1);
 });
 
 process.on('exit', (code) => {
-  console.log(`About to exit with code ${code}`);
+  logger.info(`About to exit with code ${code}`);
 });

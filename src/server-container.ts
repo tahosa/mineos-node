@@ -2,7 +2,7 @@ import type { Request } from 'express';
 import type { Server, Namespace, Socket } from 'socket.io';
 
 import { CronJob } from 'cron';
-import { Fireworm } from 'fireworm';
+import Fireworm from 'fireworm';
 import fs from 'fs-extra';
 import introspect from 'introspect';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +13,7 @@ import { Tail } from 'tail';
 
 import { Logger } from './lib/logger';
 
-import { testMembership } from './auth-new.js';
+import { testMembership } from './auth-new';
 import { Instance, type OwnerData, type Properties } from './instance';
 import { usedJavaVersion } from './java';
 import { CronTask } from './constants';
@@ -38,8 +38,8 @@ const FILESIZE_LIMIT_THRESHOLD = 256000;
 const NOTICES_QUEUE_LENGTH = 10; // 0 < q <= 10
 
 export type ServerContainerConfig = {
-  baseDir: string;
-  additionalLogs: string;
+  base_directory: string;
+  additional_logfiles: string;
 };
 
 type IntervalKeys = 'heartbeat' | 'checkWorldCommitInterval' | 'commit';
@@ -72,7 +72,7 @@ export class ServerContainer {
     socket: Server
   ) {
     this.logger = logger.child({ instance: name });
-    this.baseDir = config.baseDir;
+    this.baseDir = config.base_directory;
     this.instance = new Instance(name, this.baseDir);
     this.nsp = socket.of(`/${name}`);
 
@@ -90,11 +90,11 @@ export class ServerContainer {
         this.logger.warn('error applying permissions to instance:', e);
       });
     }
-    this.makeTails(config.additionalLogs);
+    this.makeTails(config.additional_logfiles);
     this.createConfigWatchers();
 
-    this.intervals.heartbeat = setInterval(this.heartbeat, HEARTBEAT_INTERVAL_MS);
-    this.intervals.checkWorldCommitInterval = setInterval(this.checkWorldCommitInterval, 1 * 60 * 1000); // check for changes every minute
+    this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS);
+    this.intervals.checkWorldCommitInterval = setInterval(() => { this.checkWorldCommitInterval() }, 1 * 60 * 1000); // check for changes every minute
 
     this.setupCron();
 
@@ -211,7 +211,7 @@ export class ServerContainer {
     ]);
     this.logger.info('using skipDirEntryPatterns: ', skipDirs);
 
-    const watcher = Fireworm(this.instance.env.cwd, { skipDirEntryPatterns: skipDirs });
+    const watcher = Fireworm(this.instance.env.cwd, { skipDirEntryPatterns: Array.from(skipDirs.values()) });
     skipDirs.forEach((dir) => watcher.ignore(dir));
     watcher.add('**/server.properties');
     watcher.add('**/server.config');
@@ -229,22 +229,34 @@ export class ServerContainer {
       const filename = path.basename(fp);
       switch (filename) {
         case 'server.properties':
-          setTimeout(this.broadcastServerProperties, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastServerProperties();
+          }, DEBOUNCE);
           break;
         case 'server.config':
-          setTimeout(this.broadcastServerConfig, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastServerConfig();
+          }, DEBOUNCE);
           break;
         case 'cron.config':
-          setTimeout(this.broadcastCronConfig, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastCronConfig();
+          }, DEBOUNCE);
           break;
         case 'eula.txt':
-          setTimeout(this.broadcastEula, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastEula();
+          }, DEBOUNCE);
           break;
         case 'server-icon.png':
-          setTimeout(this.broadcastIcon, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastIcon();
+          }, DEBOUNCE);
           break;
         case 'config.yml':
-          setTimeout(this.broadcastConfigYaml, DEBOUNCE);
+          setTimeout(() => {
+            this.broadcastConfigYaml();
+          }, DEBOUNCE);
           break;
       }
     };
@@ -258,7 +270,7 @@ export class ServerContainer {
    */
   async heartbeat(): Promise<void> {
     clearInterval(this.intervals['hearbeat']);
-    this.intervals.heartbeat = setInterval(this.heartbeat, HEARTBEAT_INTERVAL_MS);
+    this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS);
 
     const [up, memory, query, ping] = await Promise.all([
       Promise.resolve(this.instance.isUp()),
@@ -266,12 +278,12 @@ export class ServerContainer {
       this.instance.sp()['enable-query'] ? this.instance.query() : Promise.resolve({}),
       !this.instance.sc().minecraft?.unconventional ? this.instance.ping() : Promise.resolve({}),
     ]).catch((e) => {
-      this.logger.warn('heartbeat error: ', e);
+      this.logger.debug('heartbeat error', { error: e });
       return [];
     });
 
     clearInterval(this.intervals.heartbeat);
-    this.intervals.heartbeat = setInterval(this.heartbeat, HEARTBEAT_INTERVAL_MS);
+    this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS);
     this.nsp.emit('heartbeat', {
       server_name: this.name,
       timestamp: Date.now(),
@@ -291,7 +303,7 @@ export class ServerContainer {
       if (commitInterval && commitInterval > 0) {
         this.logger.info(`committing world to disk every ${commitInterval} minutes`);
         clearInterval(this.intervals.commit);
-        this.intervals.commit = setInterval(this.instance.saveall, commitInterval * 60 * 1000);
+        this.intervals.commit = setInterval(() => { this.instance.saveall() }, commitInterval * 60 * 1000);
       } else {
         this.logger.info(`not committing world to disk automatically (interval set to ${commitInterval})`);
         clearInterval(this.intervals.commit);

@@ -3,6 +3,9 @@
   "display": "Node 22",
   "_version": "22.0.0",
 
+  "ts-node": {
+    "files": true
+  },
   "compilerOptions": {
     "lib": ["es2023"],
     "module": "node16",
