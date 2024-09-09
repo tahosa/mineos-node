@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 export default {
   name: 'Mianite',
@@ -10,12 +10,16 @@ export default {
     type: 'json',
   },
   handler: async (profile_dir, body) => {
-    const p: profile[] = [];
+    const p: Profile[] = [];
 
     try {
       for (const r in body) {
-        const item = new profile();
         const ref_obj = body[r];
+        const item = new Profile({
+          id: ref_obj['version'],
+          filename: path.basename(ref_obj['download']),
+          url: ref_obj['download'],
+        });
 
         let version: string;
         try {
@@ -24,23 +28,20 @@ export default {
           continue;
         }
 
-        item['id'] = ref_obj['version'];
-        item['group'] = 'mianite';
-        item['webui_desc'] = `Realm of Mianite ${version}`;
-        item['weight'] = 10;
-        item['filename'] = path.basename(ref_obj['download']);
-        item['url'] = ref_obj['download'];
-        item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id || '', item.filename));
-        item['version'] = version;
-        item['release_version'] = version;
+        item.group = 'mianite';
+        item.webui_desc = `Realm of Mianite ${version}`;
+        item.weight = 10;
+        item.downloaded = fs.existsSync(path.join(profile_dir, item.id || '', item.filename));
+        item.version = version;
+        item.release_version = version;
 
         switch (ref_obj['version_tag']) {
           case 'Recommended':
-            item['type'] = 'release';
+            item.type = 'release';
             break;
           default:
-            if (ref_obj.version.match(/RC|A/)) item['type'] = 'snapshot';
-            else item['type'] = 'release';
+            if (ref_obj.version.match(/RC|A/)) item.type = 'snapshot';
+            else item.type = 'release';
             break;
         }
 
@@ -52,4 +53,4 @@ export default {
 
     return p;
   }, //end handler
-} as collection;
+} as Collection;

@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import xml_parser from 'xml2js';
 
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 export default {
   name: 'SpongeVanilla',
@@ -11,7 +11,7 @@ export default {
     type: 'text',
   },
   handler: async (profile_dir, body) => {
-    const p: profile[] = [];
+    const p: Profile[] = [];
 
     try {
       xml_parser.parseString(body, (inner_err, result) => {
@@ -21,11 +21,16 @@ export default {
           const packs = result['metadata']['versioning'][0]['versions'][0]['version'];
 
           for (const index in packs) {
-            const item = new profile();
             const matches = packs[index].match(/([\d.]+)-([\d.]+)?-?(\D+)-(\d+)/);
+            const version = packs[index];
+            const item = new Profile({
+              id: `SpongeVanilla-${matches[1]}${matches[3][0].toLowerCase()}${matches[4]}`,
+              filename: `spongevanilla-${version}.jar`,
+              url: `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${version}/spongevanilla-${version}.jar`,
+            });
 
-            item['version'] = packs[index];
-            item['group'] = 'spongevanilla';
+            item.version = version;
+            item.group = 'spongevanilla';
 
             if (!matches || matches.length < 5) {
               continue;
@@ -33,23 +38,19 @@ export default {
 
             switch (matches[3]) {
               case 'DEV':
-                item['type'] = 'snapshot';
+                item.type = 'snapshot';
                 break;
               case 'BETA':
-                item['type'] = 'release';
+                item.type = 'release';
                 break;
               default:
-                item['type'] = 'old_version';
+                item.type = 'old_version';
                 break;
             }
 
-            item['id'] = `SpongeVanilla-${matches[1]}${matches[3][0].toLowerCase()}${matches[4]}`;
-            item['webui_desc'] = `Version ${matches[2]}, build ${matches[4]} (mc: ${matches[1]})`;
-            item['weight'] = 5;
-            item['filename'] = `spongevanilla-${item.version}.jar`;
-            item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id || '', item.filename || ''));
-            item['url'] =
-              `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${item.version}/spongevanilla-${item.version}.jar`;
+            item.webui_desc = `Version ${matches[2]}, build ${matches[4]} (mc: ${matches[1]})`;
+            item.weight = 5;
+            item.downloaded = fs.existsSync(path.join(profile_dir, item.id || '', item.filename || ''));
             p.push(item);
           }
         } catch (e) {
@@ -62,4 +63,4 @@ export default {
 
     return p;
   }, //end handler
-} as collection;
+} as Collection;

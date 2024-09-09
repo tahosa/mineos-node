@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs-extra';
 
 import { PromisePool } from '../lib/util';
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 type MojangVersion = {
   id: string;
@@ -29,8 +29,8 @@ export default {
     type: 'json',
   },
   handler: async (profile_dir, body) => {
-    const promise = new PromisePool<profile, MojangVersion>(body.versions as MojangVersion[], 2, async (version) => {
-      let type: profile['type'] = 'old_version';
+    const promise = new PromisePool<Profile, MojangVersion>(body.versions as MojangVersion[], 2, async (version) => {
+      let type: Profile['type'] = 'old_version';
 
       switch (version.type) {
         case 'release':
@@ -50,7 +50,7 @@ export default {
         url = details.data.downloads.server.url;
       }
 
-      const item: profile = {
+      const item: Profile = {
         id,
         type,
         time: Date.parse(version.time),
@@ -69,4 +69,4 @@ export default {
 
     return promise.process();
   },
-} as collection;
+} as Collection;

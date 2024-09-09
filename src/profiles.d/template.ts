@@ -1,5 +1,15 @@
-export default class profile {
-  id?: string;
+type ProgressState = {
+  percent: number;
+  size: {
+    total: number;
+    transferred: number;
+  };
+};
+
+export default class Profile {
+  id: string;
+  filename: string;
+  url: string;
   time?: number;
   releaseTime?: number;
   type?: 'release' | 'snapshot' | 'old_version';
@@ -7,20 +17,25 @@ export default class profile {
   webui_desc?: string;
   weight: number = 0;
   downloaded: boolean = false;
-  filename?: string;
   version?: string | number;
   release_version?: string;
-  url?: string;
+  progress?: ProgressState;
 
-  constructor() {}
+  constructor({ id, filename, url }: { id: string; filename: string; url: string }) {
+    this.id = id;
+    this.filename = filename;
+    this.url = url;
+  }
 }
 
-export type collection = {
+type RequestType = 'json' | 'text';
+
+export type Collection = {
   name: string;
-  handler: (profile_dir: string, body?: any) => Promise<profile[]>;
+  handler: (profile_dir: string, body?: any) => Promise<Profile[]>;
   postdownload?: (profile_dir: string, dest_filepath: string) => Promise<void>;
   request_args?: {
     url: string;
-    type: 'json' | 'text';
+    type: RequestType;
   };
 };

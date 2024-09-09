@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import xml_parser from 'xml2js';
 
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 export default {
   name: 'BungeeCord',
@@ -11,7 +11,7 @@ export default {
     type: 'text',
   },
   handler: async (profile_dir, body) => {
-    const p: profile[] = [];
+    const p: Profile[] = [];
     let weight = 0;
 
     try {
@@ -21,17 +21,19 @@ export default {
         const packs = result['feed']['entry'];
 
         for (const index in packs) {
-          const item = new profile();
+          const version = packs[index]['id'][0].split(':').slice(-1)[0];
+          const item = new Profile({
+            id: `BungeeCord-${version}`,
+            filename: `BungeeCord-${version}.jar`,
+            url: `http://ci.md-5.net/job/BungeeCord/${version}/artifact/bootstrap/target/BungeeCord.jar`,
+          });
 
-          item['version'] = packs[index]['id'][0].split(':').slice(-1)[0];
-          item['group'] = 'bungeecord';
-          item['type'] = 'release';
-          item['id'] = `BungeeCord-${item.version}`;
-          item['webui_desc'] = packs[index]['title'][0];
-          item['weight'] = weight;
-          item['filename'] = `BungeeCord-${item.version}.jar`;
-          item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
-          item['url'] = `http://ci.md-5.net/job/BungeeCord/${item.version}/artifact/bootstrap/target/BungeeCord.jar`;
+          item.version = version;
+          item.group = 'bungeecord';
+          item.type = 'release';
+          item.webui_desc = packs[index]['title'][0];
+          item.weight = weight;
+          item.downloaded = fs.existsSync(path.join(profile_dir, item.id, item.filename));
           p.push(item);
           weight++;
         }
@@ -42,4 +44,4 @@ export default {
 
     return p;
   }, //end handler
-} as collection;
+} as Collection;

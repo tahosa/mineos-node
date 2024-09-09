@@ -1,8 +1,6 @@
 import axios from 'axios';
-import fs from 'fs-extra';
-import path from 'path';
 
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 export default (name) => {
   const lowername = name.toLowerCase();
@@ -15,7 +13,7 @@ export default (name) => {
       type: 'json',
     },
     handler: async (profile_dir, body) => {
-      const p: profile[] = [];
+      const p: Profile[] = [];
       const paperVersions: Promise<any>[] = [];
       let weight = 0;
 
@@ -37,19 +35,18 @@ export default (name) => {
             const build = response.data.builds[response.data.builds.length - 1];
             const splitPath = response.request.path.split('/');
             const ver = splitPath[splitPath.length - 2];
-            const item = new profile();
+            const item = new Profile({
+              id: `${titlename}-${ver}-${build}`,
+              filename: `${lowername}-${ver}-${build}.jar`,
+              url: `${response.request.res.responseUrl}builds/${build}/downloads/${lowername}-${ver}-${build}.jar`,
+            });
 
-            item['id'] = `${titlename}-${ver}-${build}`;
-            item['group'] = lowername;
-            item['webui_desc'] = `Latest ${titlename} build for ${ver}`;
-            item['weight'] = weight;
-            item['filename'] = `${lowername}-${ver}-${build}.jar`;
-            item['url'] =
-              `${response.request.res.responseUrl}builds/${build}/downloads/${lowername}-${ver}-${build}.jar`;
-            item['downloaded'] = fs.existsSync(path.join(profile_dir, item.id, item.filename));
-            item['version'] = ver;
-            item['release_version'] = ver;
-            item['type'] = 'release';
+            item.group = lowername;
+            item.webui_desc = `Latest ${titlename} build for ${ver}`;
+            item.weight = weight;
+            item.version = ver;
+            item.release_version = ver;
+            item.type = 'release';
 
             p.push(item);
             weight++;
@@ -62,5 +59,5 @@ export default (name) => {
         return [];
       }
     }, //end handler
-  } as collection;
+  } as Collection;
 };

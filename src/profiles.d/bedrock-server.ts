@@ -1,12 +1,12 @@
 import fs from 'fs-extra';
 import path from 'path';
 
-import profile, { type collection } from './template';
+import Profile, { type Collection } from './template';
 
 export default {
   name: 'Minecraft Bedrock',
-  handler: async (profile_dir: string): Promise<profile[]> => {
-    const p: profile[] = [];
+  handler: async (profile_dir: string): Promise<Profile[]> => {
+    const p: Profile[] = [];
 
     const versions: [string, number][] = [
       ['1.18.33.02', 0],
@@ -66,4 +66,4 @@ export default {
     // perform an async chmod of the unipper extracted bedrock_server binary
     return fs.chmod(profile_dir + '/bedrock_server', 0o755);
   },
-} as collection;
+} as Collection;
