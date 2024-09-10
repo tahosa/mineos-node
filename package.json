@@ -25,7 +25,7 @@
   "dependencies": {
     "@ilb/posix": "^5.0.1",
     "adm-zip": "^0.4.11",
-    "angular": "^1.8.3",
+    "angular": "1.5.x",
     "angular-moment": "1.0.x",
     "angular-sanitize": "1.5.x",
     "angular-translate": "^2.19.1",

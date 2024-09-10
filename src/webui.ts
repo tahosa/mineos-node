@@ -8,10 +8,11 @@ import express from 'express';
 import compression from 'compression';
 import passport from 'passport';
 import LocalStrategy from 'passport-local';
+import passportSocketIO from 'passport.socketio';
 import expressSession from 'express-session';
 import bodyParser from 'body-parser';
 import methodOverride from 'method-override';
-//import cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 import token from 'crypto';
 import http from 'node:http';
 import https from 'node:https';
@@ -142,10 +143,19 @@ const io = new Server(httpServer);
 
 // https://github.com/socketio/socket.io/blob/master/examples/passport-example/index.js#L76-L80//
 // Convert connect middlware to Socket.IO middleware
-const wrap = (middleware) => (socket, next) => middleware(socket.request, {}, next);
-io.use(wrap(sessionMiddleware));
-io.use(wrap(passport.initialize()));
-io.use(wrap(passport.session()));
+// const wrap = (middleware) => (socket, next) => middleware(socket.request, {}, next);
+// io.use(wrap(sessionMiddleware));
+// io.use(wrap(passport.initialize()));
+// io.use(wrap(passport.session()));
+
+io.use(
+  passportSocketIO.authorize({
+    cookieParser, // the same middleware you registrer in express
+    key: 'express.sid', // the name of the cookie where express/connect stores its session_id
+    secret, // the session_secret to parse the cookie
+    store: sessionStore, // we NEED to use a sessionstore. no memorystore please
+  })
+);
 
 try {
   checkDependencies();
@@ -154,7 +164,13 @@ try {
   process.exit(1);
 }
 
-const config_locs = ['custom.conf', './mineos.conf', '../mineos.conf', '/etc/mineos.conf', '/usr/local/etc/mineos.conf'];
+const config_locs = [
+  'custom.conf',
+  './mineos.conf',
+  '../mineos.conf',
+  '/etc/mineos.conf',
+  '/usr/local/etc/mineos.conf',
+];
 
 let mineos_config;
 if (typeof config_file !== 'undefined') {

@@ -111,21 +111,21 @@ export class ServerContainer {
 
       const conn = new ServerContainer.Connection(this, socket);
 
-      socket.on('command', conn.produceReceipt);
-      socket.on('get_file_contents', conn.getFileContents);
-      socket.on('get_available_tails', conn.getAvailableTails);
-      socket.on('page_data', conn.getPageData);
-      socket.on('archives', conn.getArchives);
-      socket.on('increments', conn.getIncrements);
-      socket.on('increment_sizes', conn.getIncrementSizes);
-      socket.on('cron', conn.manageCron);
-      socket.on('property', conn.getProperty);
-      socket.on('server.properties', this.broadcastServerProperties);
-      socket.on('server.config', this.broadcastServerConfig);
-      socket.on('cron.config', this.broadcastCronConfig);
-      socket.on('server-icon.png', this.broadcastIcon);
-      socket.on('config.yml', this.broadcastConfigYaml);
-      socket.on('req_server_activity', this.broadcastNotices);
+      socket.on('command', (args) => { conn.produceReceipt(args) });
+      socket.on('get_file_contents', (args) => { conn.getFileContents(args) });
+      socket.on('get_available_tails', () => { conn.getAvailableTails() });
+      socket.on('page_data', (args) => { conn.getPageData(args) });
+      socket.on('archives', () => { conn.getArchives() });
+      socket.on('increments', () => { conn.getIncrements() });
+      socket.on('increment_sizes', () => { conn.getIncrementSizes() });
+      socket.on('cron', (args) => { conn.manageCron(args) });
+      socket.on('property', (args) => { conn.getProperty(args) });
+      socket.on('server.properties', () => { this.broadcastServerProperties() });
+      socket.on('server.config', () => { this.broadcastServerConfig() });
+      socket.on('cron.config', () => { this.broadcastCronConfig() });
+      socket.on('server-icon.png', () => { this.broadcastIcon() });
+      socket.on('config.yml', () => { this.broadcastConfigYaml() });
+      socket.on('req_server_activity', () => { this.broadcastNotices() });
     });
   }
 
@@ -269,8 +269,8 @@ export class ServerContainer {
    * Monitor the instance for health periodically
    */
   async heartbeat(): Promise<void> {
-    clearInterval(this.intervals['hearbeat']);
-    this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS);
+    clearInterval(this.intervals.heartbeat);
+    this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS * 3);
 
     const [up, memory, query, ping] = await Promise.all([
       Promise.resolve(this.instance.isUp()),
