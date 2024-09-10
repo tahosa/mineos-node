@@ -15,6 +15,11 @@ export default {
     try {
       for (const r in body) {
         const ref_obj = body[r];
+
+        if (!ref_obj['download']) {
+          continue;
+        }
+
         const item = new Profile({
           id: ref_obj['version'],
           filename: path.basename(ref_obj['download']),

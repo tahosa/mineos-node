@@ -23,6 +23,11 @@ export default {
           for (const index in packs) {
             const matches = packs[index].match(/([\d.]+)-([\d.]+)?-?(\D+)-(\d+)/);
             const version = packs[index];
+
+            if (!matches || matches.length < 5) {
+              continue;
+            }
+
             const item = new Profile({
               id: `SpongeVanilla-${matches[1]}${matches[3][0].toLowerCase()}${matches[4]}`,
               filename: `spongevanilla-${version}.jar`,
@@ -31,10 +36,6 @@ export default {
 
             item.version = version;
             item.group = 'spongevanilla';
-
-            if (!matches || matches.length < 5) {
-              continue;
-            }
 
             switch (matches[3]) {
               case 'DEV':

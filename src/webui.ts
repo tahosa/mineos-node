@@ -72,7 +72,7 @@ passport.use(
       localAuth(username, password)
         .then((user) => {
           if (user) {
-            logger.log('Successful login attempt for username:', username);
+            logger.info(`Successful login attempt for username: ${username}`);
             const logstring =
               new Date().toString() + ' - success from: ' + req.connection.remoteAddress + ' user: ' + username + '\n';
             try {
@@ -86,7 +86,7 @@ passport.use(
           }
         })
         .catch(() => {
-          logger.log('Unsuccessful login attempt for username:', username);
+          logger.info(`Unsuccessful login attempt for username: ${username}`);
           const logstring =
             new Date().toString() + ' - failure from: ' + req.connection.remoteAddress + ' user: ' + username + '\n';
           try {

@@ -13,7 +13,7 @@ type MojangVersion = {
   releaseTime: string;
 };
 
-type MojanDetails = {
+type MojangDetails = {
   id: string;
   downloads: {
     server: {
@@ -44,11 +44,18 @@ export default {
       const id = version.id;
       const filename = `minecraft_server.${version.id}.jar`;
 
-      let url = `https://s3.amazonaws.com/Minecraft.Download/versions/${id}/minecraft_server.${id}.jar`;
-      const details = await axios<MojanDetails>({ url: version.url });
+      let url: string = '';
+      const details = await axios<MojangDetails>({ url: version.url });
+      // Attempt to get the URL from the API
       if (details.data.id === version.id) {
-        url = details.data.downloads.server.url;
+        url = details.data.downloads.server?.url;
       }
+
+      // If the API doesn't provide a server download, fall back to a generated URL
+      if (!url) {
+        url = `https://s3.amazonaws.com/Minecraft.Download/versions/${id}/minecraft_server.${id}.jar`;
+      }
+
 
       const item: Profile = {
         id,

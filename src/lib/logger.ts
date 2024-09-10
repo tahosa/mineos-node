@@ -9,7 +9,7 @@ export const Logger = winston.createLogger({
     new winston.transports.Console({
       format: format.combine(
         //format.colorize({ all: true }),
-        format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'label']}),
+        format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'label', 'request']}),
         //format.printf((info) => ` ${info.timestamp} [${info.level}] {${info.metadata.service}}: ${info.message}`),
         format.json(),
         format.prettyPrint(),

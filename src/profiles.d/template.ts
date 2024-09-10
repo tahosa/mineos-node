@@ -1,5 +1,5 @@
 type ProgressState = {
-  percent: number;
+  percent: string;
   size: {
     total: number;
     transferred: number;

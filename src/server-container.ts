@@ -111,7 +111,9 @@ export class ServerContainer {
 
       const conn = new ServerContainer.Connection(this, socket);
 
-      socket.on('command', (args) => { conn.produceReceipt(args) });
+      socket.on('command', (args) => {
+        conn.produceReceipt(args)
+      });
       socket.on('get_file_contents', (args) => { conn.getFileContents(args) });
       socket.on('get_available_tails', () => { conn.getAvailableTails() });
       socket.on('page_data', (args) => { conn.getPageData(args) });
@@ -470,7 +472,7 @@ export class ServerContainer {
    *
    * @param args Arguments to pass to the function, including the function name
    */
-  private dispatch(args: DispatchCommand) {
+  private async dispatch(args: DispatchCommand) {
     let fn, argNames;
     try {
       fn = this.instance[args.command];
@@ -514,8 +516,15 @@ export class ServerContainer {
       this.cleanup();
     }
 
-    this.logger.info(`received request "${args.command}"`);
-    fn.apply(this.instance, fnArgs);
+    this.logger.info(`dispatching command "${args.command}"`);
+    try {
+      await fn.apply(this.instance, fnArgs);
+    } catch (e) {
+      this.logger.error(`error running "${args.command}"`, e);
+      args.success = false;
+      args.error = e;
+      this.nsp.emit('server_fin', args);
+    }
   }
 
   /**
@@ -545,7 +554,7 @@ export class ServerContainer {
      * @param args Arguments and the command to run to pass to the instance.
      */
     async produceReceipt(args: DispatchCommand): Promise<void> {
-      this.logger.info(`issued command : "${args.command}"`);
+      this.logger.info(`received command : "${args.command}"`);
       args.uuid = randomUUID();
       args.time_initiated = Date.now();
       this.sup.nsp.emit('server_ack', args);

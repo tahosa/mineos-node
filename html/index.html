@@ -65,7 +65,7 @@
 
                 <!-- START Toolbar -->
                 <ul class="toolbar" id="toolbar" ng-controller="Toolbar">
-                    
+
                     <!-- START Notification -->
                     <li class="notification">
                         <a href="#" data-toggle="dropdown">
@@ -457,7 +457,7 @@
                 <div class="container-fluid" ng-show="page == 'create_server'">
 
                     <!-- START General Elements -->
-                        
+
                     <header>
                         <h4 class="title"> {{ 'CREATE_NEW_SERVER' | translate }}</h4>
                     </header>
@@ -564,7 +564,7 @@
                                     <label class="control-label">enable-query</label>
                                     <div class="controls">
                                         <label class="checkbox">
-                                            <input type="checkbox" class="nostyle" value="true" ng-model="serverform.enable_query"> 
+                                            <input type="checkbox" class="nostyle" value="true" ng-model="serverform.enable_query">
                                         </label>
                                     </div>
                                 </div><!--/ Default Checkbox -->
@@ -574,7 +574,7 @@
                                     <label class="control-label">generate-structures</label>
                                     <div class="controls">
                                         <label class="checkbox">
-                                            <input type="checkbox" class="nostyle" value="true" ng-model="serverform.generate_structures" ng-init="serverform.generate_structures=true"> 
+                                            <input type="checkbox" class="nostyle" value="true" ng-model="serverform.generate_structures" ng-init="serverform.generate_structures=true">
                                         </label>
                                     </div>
                                 </div><!--/ Default Checkbox -->
@@ -590,7 +590,7 @@
                             </div>
                         </form>
                     </section>
-                
+
                 <!--/ END General Elements -->
                 </div>
                 <!--/ END Content -->
@@ -647,7 +647,7 @@
                         <!-- START Basic Table -->
                         <div class="span12 widget">
                             <header>
-                                <h4 class="title" translate="AVAILABLE_SERVER_JARS"></h4> 
+                                <h4 class="title" translate="AVAILABLE_SERVER_JARS"></h4>
                                 <div class="alert alert-error" ng-if="!profiles.length">
                                     <strong translate="NO_PROFILES_DOWNLOADED"></strong>
                                 </div>
@@ -690,10 +690,10 @@
                                             </tr>
                                         </tbody>
                                         <tbody>
-                                            <tr ng-repeat="jar in profiles | 
-                                                           profile_filter: {field: 'group', value: serverprofiles.group} | 
-                                                           profile_filter: {field: 'type', value: serverprofiles.type} | 
-                                                           profile_downloaded: serverprofiles.downloaded | 
+                                            <tr ng-repeat="jar in profiles |
+                                                           profile_filter: {field: 'group', value: serverprofiles.group} |
+                                                           profile_filter: {field: 'type', value: serverprofiles.type} |
+                                                           profile_downloaded: serverprofiles.downloaded |
                                                            orderBy:['-weight', '-releaseTime', 'id']">
                                                 <td>{{ jar.id }}</td>
                                                 <td>{{ jar.webui_desc }}</td>
@@ -724,13 +724,13 @@
                         <!-- START Basic Table -->
                         <div class="span12 widget">
                             <header>
-                                <h4 class="title" translate="BUILDTOOLS"></h4> 
+                                <h4 class="title" translate="BUILDTOOLS"></h4>
                             </header>
                             <section class="body">
                                 <div class="body-inner no-padding">
                                     <p translate="BUILDTOOLS_INSTRUCTIONS"></p>
-                                    
-                                    
+
+
                                     <table class="table">
                                         <thead>
                                             <tr>
@@ -739,10 +739,10 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr ng-repeat="jar in profiles | 
-                                                           profile_filter: {field: 'group', value: 'mojang'} | 
-                                                           profile_filter: {field: 'type', value: 'release'} | 
-                                                           remove_old_versions: '1.8.0' | 
+                                            <tr ng-repeat="jar in profiles |
+                                                           profile_filter: {field: 'group', value: 'mojang'} |
+                                                           profile_filter: {field: 'type', value: 'release'} |
+                                                           remove_old_versions: '1.8.0' |
                                                            orderBy:['+weight', '-releaseTime', 'id']">
                                                 <td>{{ jar.id }}</td>
                                                 <td>
@@ -873,13 +873,13 @@
                                                     <div class="span4">
                                                         <div class="btn-group btn-block">
                                                             <button class="btn btn-danger span6" translate="STOP"
-                                                                    ng-disabled="!servers[current].heartbeat.up" 
+                                                                    ng-disabled="!servers[current].heartbeat.up"
                                                                     ng-click="server_command('stop')"
                                                                     ng-hide="servers[current].sc.minecraft.unconventional"
                                                                     ></button>
                                                             <button class="btn btn-danger span6" translate="KILL"
-                                                                    ng-disabled="!servers[current].heartbeat.up" 
-                                                                    ng-click="server_command('kill')" 
+                                                                    ng-disabled="!servers[current].heartbeat.up"
+                                                                    ng-click="server_command('kill')"
                                                                     ng-hide="!servers[current].sc.minecraft.unconventional"
                                                                     ></button>
                                                             <button class="btn btn-danger dropdown-toggle" data-toggle="dropdown"><span class="caret"></span></button>
@@ -890,7 +890,7 @@
                                                                        ng-click="server_command('stop')"></a></li>
                                                                 <li><a href="#" translate="STOP_AND_BACKUP"
                                                                        ng-hide="extra_action('stop_and_backup')"
-                                                                       ng-click="server_command('stop_and_backup')"></a></li>
+                                                                       ng-click="server_command('stopAndBackup')"></a></li>
                                                                 <li><a href="#" translate="RESTART"
                                                                        ng-hide="extra_action('restart')"
                                                                        ng-click="server_command('restart')"></a></li>
@@ -926,18 +926,18 @@
                                                     <!-- Select -->
                                                     <div class="control-group">
                                                         <div class="controls">
-                                                            <select class="" 
-                                                                ng-model="myprofile" 
-                                                                data-ng-options="p as p.id group by p.group for p in profiles | 
-                                                                profile_downloaded: 'only_downloaded' | 
-                                                                orderBy:'-releaseTime'" 
+                                                            <select class=""
+                                                                ng-model="myprofile"
+                                                                data-ng-options="p as p.id group by p.group for p in profiles |
+                                                                profile_downloaded: 'only_downloaded' |
+                                                                orderBy:'-releaseTime'"
                                                                 ng-change="change_sc('minecraft', 'profile', myprofile.id)">
                                                                 <option value="" selected translate="CHANGE_PROFILE_TO"></option>
                                                             </select>
                                                         </div>
                                                         <div class="controls">
-                                                            <button class="btn btn-default" ng-click="server_command('copy_profile')" translate="COPY_PROFILE"></button>
-                                                            <button class="btn btn-default" ng-click="server_command('run_installer')" ng-hide="!servers[current].page_data.glance.ftb_installer">FTBInstall.sh</button>
+                                                            <button class="btn btn-default" ng-click="server_command('copyProfile')" translate="COPY_PROFILE"></button>
+                                                            <button class="btn btn-default" ng-click="server_command('runInstaller')" ng-hide="!servers[current].page_data.glance.ftb_installer">FTBInstall.sh</button>
                                                         </div>
                                                     </div><!--/ Select -->
                                                     <label class="checkbox">
@@ -952,14 +952,14 @@
                                                     <div class="controls">
                                                         <label class="control-label" translate="COMMIT_INTERVAL"></label>
                                                         <div class="control-group">
-                                                            <input type="text" 
+                                                            <input type="text"
                                                             class="span4"
                                                             placeholder="60"
-                                                            ng-model="servers[current].sc.minecraft.commit_interval" 
-                                                            ng-change="change_sc('minecraft', 'commit_interval', servers[current].sc.minecraft.commit_interval)" 
+                                                            ng-model="servers[current].sc.minecraft.commit_interval"
+                                                            ng-change="change_sc('minecraft', 'commit_interval', servers[current].sc.minecraft.commit_interval)"
                                                             ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
 
-                                                            <button type="button" class="btn span2 pull-left" ng-click="server_command('saveall_latest_log')" ng-show="current && servers[current].live_logs['logs/latest.log'].length">save-all</button>
+                                                            <button type="button" class="btn span2 pull-left" ng-click="server_command('saveallLatestLog')" ng-show="current && servers[current].live_logs['logs/latest.log'].length">save-all</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -999,9 +999,9 @@
                                                         <div class="controls">
                                                             <div class="input-prepend input-append">
                                                                 <span class="add-on" translate="JAVA_XMX"></span>
-                                                                <input type="text" 
-                                                                    ng-model="servers[current].sc.java.java_xmx" 
-                                                                    ng-change="change_sc('java', 'java_xmx', servers[current].sc.java.java_xmx)" 
+                                                                <input type="text"
+                                                                    ng-model="servers[current].sc.java.java_xmx"
+                                                                    ng-change="change_sc('java', 'java_xmx', servers[current].sc.java.java_xmx)"
                                                                     ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                                                 <span class="add-on" translate="MB_ABBREVIATION"></span>
                                                             </div>
@@ -1009,8 +1009,8 @@
                                                         <div class="controls">
                                                             <div class="input-prepend input-append">
                                                                 <span class="add-on" translate="JAVA_XMS"></span>
-                                                                <input type="text" 
-                                                                    ng-model="servers[current].sc.java.java_xms" 
+                                                                <input type="text"
+                                                                    ng-model="servers[current].sc.java.java_xms"
                                                                     ng-change="change_sc('java', 'java_xms', servers[current].sc.java.java_xms)"
                                                                     ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                                                 <span class="add-on" translate="MB_ABBREVIATION"></span>
@@ -1020,20 +1020,20 @@
                                                     <!--/ Help Text -->
                                                     <div class="controls" ng-hide="servers[current].sc.minecraft.unconventional">
                                                         <label class="control-label" translate="ADDITIONAL_JAVA_ARGS"></label>
-                                                        <input type="text" 
+                                                        <input type="text"
                                                             class="span6"
                                                             placeholder="-XX:+DisableExplicitGC"
-                                                            ng-model="servers[current].sc.java.java_tweaks" 
-                                                            ng-change="change_sc('java', 'java_tweaks', servers[current].sc.java.java_tweaks)" 
+                                                            ng-model="servers[current].sc.java.java_tweaks"
+                                                            ng-change="change_sc('java', 'java_tweaks', servers[current].sc.java.java_tweaks)"
                                                             ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                                     </div>
                                                     <div class="controls" ng-hide="servers[current].sc.minecraft.unconventional">
                                                         <label class="control-label" translate="ADDITIONAL_JAR_ARGS"></label>
-                                                        <input type="text" 
+                                                        <input type="text"
                                                             class="span6"
                                                             placeholder="nogui"
-                                                            ng-model="servers[current].sc.java.jar_args" 
-                                                            ng-change="change_sc('java', 'jar_args', servers[current].sc.java.jar_args)" 
+                                                            ng-model="servers[current].sc.java.jar_args"
+                                                            ng-change="change_sc('java', 'jar_args', servers[current].sc.java.jar_args)"
                                                             ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                                     </div>
                                                 </div>
@@ -1048,7 +1048,7 @@
                                         <p>&nbsp;</p>
                                     </div>
                                     <!--/ END Row -->
-                                        
+
                                     <!-- START Row -->
                                     <div class="row-fluid">
                                         <!-- START Widget Header Badge -->
@@ -1101,7 +1101,7 @@
                                                     </div><!--/ Alert Error -->
                                                     <p><button type="button" class="btn btn-small btn-primary" ng-click="server_command('archive')"><span class="icone-plus"></span> {{ 'CREATE_NEW_ARCHIVE' | translate }}</button></p>
                                                 </div>
-                                                
+
                                             </section>
                                         </div>
                                         <!--/ END Widget Header Badge -->
@@ -1127,7 +1127,7 @@
                                                         <div class="control-group">
                                                             <div class="controls">
                                                                 {{ 'SERVER_OWNER' | translate }}: {{ '{0} ({1})'.format(
-                                                                    servers[current].page_data.glance.owner.username, 
+                                                                    servers[current].page_data.glance.owner.username,
                                                                     servers[current].page_data.glance.owner.uid) }}
                                                                 </select>
                                                             </div>
@@ -1136,11 +1136,11 @@
                                                     <!-- Select -->
                                                         <div class="control-group">
                                                             <div class="controls">
-                                                                {{ 'GROUP_OWNER' | translate }}: <select class="span4" 
-                                                                                                ng-model="servers[current].page_data.glance.owner.gid" 
+                                                                {{ 'GROUP_OWNER' | translate }}: <select class="span4"
+                                                                                                ng-model="servers[current].page_data.glance.owner.gid"
                                                                                                 ng-change="change_owner()">
-                                                                    <option 
-                                                                        ng-repeat="group in groups" 
+                                                                    <option
+                                                                        ng-repeat="group in groups"
                                                                         value="{{ group.gid }}"
                                                                         ng-selected="group.gid == servers[current].page_data.glance.owner.gid">{{ '{0} ({1})'.format(group.groupname, group.gid) }}</option>
                                                                 </select>
@@ -1177,7 +1177,7 @@
                                                     </div><!--/ Default Checkbox Inline -->
 
                                                 </div>
-                                                
+
                                             </section>
                                         </div>
                                         <!--/ END Widget Header Badge -->
@@ -1215,7 +1215,7 @@
                                 </ul>
                                 <!-- button is put after dropdown, pull-right class makes them float to the right order -->
                                 <button type="button" class="btn btn-mini btn-success pull-right" ng-click="servers[current].refresh_increment_sizes()" translate="GET_INCREMENT_SIZES"></button>
-                                
+
                                 <!--/ END Toolbar -->
                             </header>
                             <section class="body">
@@ -1296,7 +1296,7 @@
                                                         <div class="btn-group">
                                                             <button class="btn btn-small dropdown-toggle" data-toggle="dropdown">{{ 'ACTIONS' | translate }} <span class="caret"></span></button>
                                                             <ul class="dropdown-menu">
-                                                                <li><a ng-click="server_command('delete_archive', {filename: archive.filename})" translate="DELETE_THIS_ARCHIVE"></a></li>
+                                                                <li><a ng-click="server_command('deleteArchive', {filename: archive.filename})" translate="DELETE_THIS_ARCHIVE"></a></li>
                                                                 <li><a href="#"></a></li>
                                                                 <li><a ng-click="server_from_archive(archive.filename, current)" translate="CREATE_FROM_ARCHIVE"></a></li>
                                                             </ul>
@@ -1442,9 +1442,9 @@
                                     <div class="control-group" ng-repeat="(property, new_value) in servers[current].sp track by $index">
                                         <div class="controls">
                                             <input type="text" class="input-large" ng-value="property" readonly>
-                                            <input type="text" class="input-xlarge" 
-                                                ng-value="new_value" 
-                                                ng-change="change_sp()" 
+                                            <input type="text" class="input-xlarge"
+                                                ng-value="new_value"
+                                                ng-change="change_sp()"
                                                 ng-model="new_value"
                                                 ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                         </div>
@@ -1562,9 +1562,9 @@
                                                 <span class="add-on">{{ interaction.command + ' ' + player }}</span>
                                                 <input type="text" name="input-text" class="" ng-model="interaction.args" />
                                             </div>
-                                            <button class="btn btn-success control_centering" ng-click="player_command(interaction.command, player, interaction.args)" ng-show="interaction.command"><span class="icone-share-alt"></span> </button> 
+                                            <button class="btn btn-success control_centering" ng-click="player_command(interaction.command, player, interaction.args)" ng-show="interaction.command"><span class="icone-share-alt"></span> </button>
                                         </div>
-                                        
+
                                         <button class="btn btn-small" ng-click="player_command('op', player, '')"><span class="icon-arrow-up"></span> op</button>
                                         <button class="btn btn-small" ng-click="player_command('deop', player, '')"><span class="icon-arrow-down"></span> de-op</button>
                                         <button class="btn btn-small btn-warning" ng-click="player_command('kill', player, '')">Kill</button>
@@ -1618,7 +1618,7 @@
                 <div class="modal-footer">
                     <button class="btn btn-primary" data-dismiss="modal" translate="SP_ADD" ng-disabled="!sp.new_attribute" ng-click="modals.close_add_sp()"></button>
                 </div>
-            </div><!--/ Modal With Animation --> 
+            </div><!--/ Modal With Animation -->
 
             <!-- Modal With Animation -->
             <div id="modal_eula" class="modal hide fade">
@@ -1630,12 +1630,12 @@
                     <p><a href="https://account.mojang.com/documents/minecraft_eula" translate="READ_THE_EULA"></a></p>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn" aria-hidden="true" translate="ACCEPT_EULA" ng-click="server_command('accept_eula')" ng-class="{'btn-default': servers[current].page_data.glance.eula != false, 'btn-primary': servers[current].page_data.glance.eula == false}"></button>
+                    <button class="btn" aria-hidden="true" translate="ACCEPT_EULA" ng-click="server_command('acceptEula')" ng-class="{'btn-default': servers[current].page_data.glance.eula != false, 'btn-primary': servers[current].page_data.glance.eula == false}"></button>
                     <button class="btn btn-warning" data-dismiss="modal" translate="KILL" ng-click="server_command('kill')" ng-show="servers[current].heartbeat.up"></button>
                     <button class="btn btn-warning" data-dismiss="modal" translate="RESTART" ng-click="modals.close_accept_eula_restart()" ng-show="servers[current].heartbeat.up"></button>
                     <button class="btn btn-warning" data-dismiss="modal" translate="START" ng-click="modals.close_accept_eula_start()" ng-show="!servers[current].heartbeat.up"></button>
                 </div>
-            </div><!--/ Modal With Animation --> 
+            </div><!--/ Modal With Animation -->
 
             <!-- Modal With Animation -->
             <div id="modal_new_server" class="modal hide fade">
@@ -1667,9 +1667,9 @@
                             <div class="controls">
                                 <div class="input-prepend input-append">
                                     <span class="add-on" translate="JAVA_XMX"></span>
-                                    <input type="text" 
-                                        ng-model="servers[current].sc.java.java_xmx" 
-                                        ng-change="change_sc('java', 'java_xmx', servers[current].sc.java.java_xmx)" 
+                                    <input type="text"
+                                        ng-model="servers[current].sc.java.java_xmx"
+                                        ng-change="change_sc('java', 'java_xmx', servers[current].sc.java.java_xmx)"
                                         ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                     <span class="add-on" translate="MB_ABBREVIATION"></span>
                                 </div>
@@ -1677,8 +1677,8 @@
                             <div class="controls">
                                 <div class="input-prepend input-append">
                                     <span class="add-on" translate="JAVA_XMS"></span>
-                                    <input type="text" 
-                                        ng-model="servers[current].sc.java.java_xms" 
+                                    <input type="text"
+                                        ng-model="servers[current].sc.java.java_xms"
                                         ng-change="change_sc('java', 'java_xms', servers[current].sc.java.java_xms)"
                                         ng-model-options="{ updateOn: 'default blur', debounce: {'default': 1500, 'blur': 0} }">
                                     <span class="add-on" translate="MB_ABBREVIATION"></span>
@@ -1690,7 +1690,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-success" ng-click="modals.close_new_server_start()" translate="START"></button>
                 </div>
-            </div><!--/ Modal With Animation --> 
+            </div><!--/ Modal With Animation -->
 
             <!-- Modal With Animation -->
             <div id="modal_server_from_archive" class="modal hide fade">
@@ -1704,7 +1704,7 @@
                 <div class="modal-footer">
                     <button class="btn btn-success" aria-hidden="true" translate="CREATE_FROM_ARCHIVE" ng-click="server_from_archive_create()"></button>
                 </div>
-            </div><!--/ Modal With Animation --> 
+            </div><!--/ Modal With Animation -->
 
             <!-- Modal With Animation -->
             <div id="modal_spigotjar" class="modal hide fade">
@@ -1725,7 +1725,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-success" ng-click="modals.close_copy_to_server(server_target, jar.id)" translate="COPY_TO_SERVER"></button>
                 </div>
-            </div><!--/ Modal With Animation --> 
+            </div><!--/ Modal With Animation -->
 
             <!-- Modal With Animation -->
             <div id="modal_niceness" class="modal hide fade">

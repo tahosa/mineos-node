@@ -78,7 +78,7 @@ app.filter('bytes_to_mb', function() {
     var sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     var i = Math.floor(Math.log(bytes) / Math.log(k));
     var converted = bytes / Math.pow(k, i);
-    
+
     return (Math.round(converted) >= 1000 ? (converted).toPrecision(4) : (converted).toPrecision(3)) + sizes[i];
   };
 })
@@ -92,7 +92,7 @@ app.filter('kb_string_to_mb', function() {
     if (kbytes) {
       var i = Math.floor(Math.log(kbytes) / Math.log(k));
       var converted = kbytes / Math.pow(k, i);
-    
+
       return (Math.round(converted) >= 1000 ? (converted).toPrecision(4) : (converted).toPrecision(3)) + sizes[i];
     } else {
       return '';
@@ -177,7 +177,7 @@ app.filter('colorize', [ '$sce', function($sce){
         ANSI_INTENSE_CODE = 1,
         ANSI_NORMAL_CODE  = 22;
 
-  var Colors = [ 
+  var Colors = [
     'black',        // 30
     'dark_red',     // 31
     'dark_green',   // 32
@@ -259,11 +259,11 @@ app.filter('colorize', [ '$sce', function($sce){
 
             if (formatCode == ANSI_INTENSE_CODE)
               intense = true;
-            else if (formatCode == ANSI_NORMAL_CODE) 
+            else if (formatCode == ANSI_NORMAL_CODE)
               intense = false;
             else if (formatCode >= ANSI_MIN_COLOR && formatCode <= ANSI_MAX_COLOR)
               colorCode = formatCode;
-            else 
+            else
               console.log('Unsupported format code: ' + formatCode);
           }
 
@@ -277,7 +277,7 @@ app.filter('colorize', [ '$sce', function($sce){
           splitString[i] += '">';
           spanOpen = true;
         }
-      } else 
+      } else
         splitString[i] = escapeChars(splitString[i]);
     }
 
@@ -412,11 +412,11 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
 
   /**
    * Setup a callback for the event on socket
-   * 
+   *
    * @param {string} eventName  The event to listen to
    * @param {string} identifier  The data received from the client
    * @param {function} callback  The listener called for the event
-   *  
+   *
    */
   socket.on('/', 'host_diskspace', function(data) {
     $scope.host_diskspace = data;
@@ -499,12 +499,12 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
   $scope.loadavg_options = {
       element: $("#load_averages"),
       fallback_xaxis_max: 1,
-      series: { 
+      series: {
         lines: {
           show: true,
           fill: .5
         },
-        shadowSize: 0 
+        shadowSize: 0
       },
       yaxis: { min: 0, max: 1 },
       xaxis: { min: 0, max: 30, show: false },
@@ -516,7 +516,7 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
   $scope.valid_server_name = function(server_name) {
     return /^(?!\.)[a-zA-Z0-9_\.]+$/.test(server_name);
   }
-  
+
   $scope.change_locale = function(locale) {
     $translate.use(locale);
   }
@@ -557,20 +557,20 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
   $scope.change_sc = function(section, property, new_value) {
     if (!new_value)
       new_value = '';
-    socket.emit($scope.current, 'command', { command: 'modify_sc',
-                                             section: section, 
+    socket.emit($scope.current, 'command', { command: 'modifySc',
+                                             section: section,
                                              property: property,
-                                             new_value: new_value });
+                                             newValue: new_value });
   }
 
   $scope.change_sp = function() {
-    socket.emit($scope.current, 'command', { command: 'modify_sp', 
+    socket.emit($scope.current, 'command', { command: 'modifySp',
                                              property: this.property,
-                                             new_value: this.new_value });
+                                             newValue: this.new_value });
   }
 
   $scope.change_owner = function() {
-    socket.emit($scope.current, 'command', { command: 'chown', 
+    socket.emit($scope.current, 'command', { command: 'chown',
                                              uid: parseInt($scope.servers[$scope.current].page_data.glance.owner.uid),
                                              gid: parseInt($scope.servers[$scope.current].page_data.glance.owner.gid)});
   }
@@ -598,8 +598,8 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
       } else {
         delete serverform['server_name'];
 
-        for (var prop in serverform) 
-          if (serverform.hasOwnProperty(prop)) 
+        for (var prop in serverform)
+          if (serverform.hasOwnProperty(prop))
             hyphenated[prop.split("_").join("-")] = serverform[prop]; //replace _ with -
 
         socket.emit('/', 'command', {
@@ -637,9 +637,9 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
     close_add_sp: function() {
       $('#modal_sp').modal('hide');
       socket.emit($scope.current, 'command', {
-        'command': 'modify_sp',
+        'command': 'modifySp',
         'property': $scope.sp.new_attribute,
-        'new_value': $scope.sp.new_value
+        'newValue': $scope.sp.new_value
       });
     },
     open_locales: function() {
@@ -775,7 +775,7 @@ app.controller("Webui", ['$scope', 'socket', 'ServerService', '$filter', '$trans
       $scope.onrebootstart = false;
       $scope.unconventional_server = false;
     }
-      
+
     $('#broadcast').prop('checked', $scope.broadcast_to_lan );
     $('#onrebootstart').prop('checked', $scope.onrebootstart );
     $('#unconventional').prop('checked', $scope.unconventional_server );
@@ -954,7 +954,7 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
       if ('suppress_popup' in data || data.success)
         suppress = true;
 
-      if (data.err == 'eula') 
+      if (data.err == 'eula')
         $('#modal_eula').modal('show');
 
       if (!suppress) {
@@ -988,7 +988,7 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
       me.channel.emit(me.server_name, 'req_server_activity');
       me.channel.emit(me.server_name, 'config.yml');
     }
-    
+
     //request new server at a glance info
     me.refresh_glance = function() {
       me.channel.emit(me.server_name, 'page_data', 'glance');
@@ -1016,7 +1016,7 @@ app.factory('ServerService', ['socket', '$filter', function(socket, $filter) {
     me.refresh_cron_data = function() {
       me.channel.emit(me.server_name, 'cron.config');
     }
-    
+
     //request all data necessary to populate the dashboard
     me.get_dashboard_data = function() {
       me.channel.emit(me.server_name, 'server-icon.png');
@@ -1072,7 +1072,7 @@ app.factory('socket', function ($rootScope) {
           sockets[server_name] = io(connect_string + server_name, {secure: true});
       }
 
-      sockets[server_name].on(eventName, function () {  
+      sockets[server_name].on(eventName, function () {
         var args = arguments;
         $rootScope.$apply(function () {
           callback.apply(sockets[server_name], args);

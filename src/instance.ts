@@ -1383,7 +1383,7 @@ export class Instance {
     const jar = (config: ServerConfig['java'], unconventional: boolean = false): string[] => {
       const systemJava = which.sync('java');
       const javaArgs = {
-        binary: config.java_binary ?? systemJava,
+        binary: config.java_binary || systemJava,
         xmx: config.java_xmx ? parseInt(config.java_xmx) : 256,
         xms: config.java_xms ? parseInt(config.java_xms) : 0,
         jarfile: config.jarfile,

@@ -126,15 +126,17 @@ export default class Server {
     this.socket.on('connect', (conn) => {
       const connection = new this.Connection(this, conn);
 
-      socket.emit('commit_msg', this.commit);
-      socket.emit('change_locale', config.webui_locale);
-      socket.emit('optional_columns', config.optional_columns);
+      this.socket.emit('commit_msg', this.commit);
+      this.socket.emit('change_locale', config.webui_locale);
+      this.socket.emit('optional_columns', config.optional_columns);
 
       for (const name in this.instances) {
         socket.emit('track_server', name);
       }
 
-      socket.on('command', connection.dispatch);
+      conn.on('command', (args) => {
+        connection.dispatch(args)
+      });
 
       connection.sendUserList();
       this.sendProfileList(true);
@@ -407,7 +409,7 @@ export default class Server {
         return data;
       } catch (e) {
         this.logger.error(
-          `Unable to retrieve profile ${c.name}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`
+          `Unable to retrieve profile ${c.name}. The definition for this profile may be improperly formed or is pointing to an invalid URI.`, e
         );
         return [];
       }
@@ -675,7 +677,7 @@ export default class Server {
         }
 
         // Not all servers will return content-length, so only update the progress if we have it
-        const totalSize = headers['Content-Length'];
+        const totalSize = headers['Content-Length'] || headers['content-length'];
         if (totalSize) {
           const total = Number(totalSize);
           let transferred = 0;
@@ -689,7 +691,7 @@ export default class Server {
                 total,
                 transferred,
               },
-              percent: transferred / total,
+              percent: ((transferred / total) * 100).toFixed(1),
             };
 
             this.sup.socket.emit('file_progress', profile);
