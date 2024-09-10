@@ -207,9 +207,10 @@ export class ServerContainer {
    * Create a set of watchers for monitoring changes to config files on disk
    */
   createConfigWatchers(): void {
+
     const skipDirs = new Set([
       ...DEFAULT_SKIPS,
-      ...fs.readdirSync(this.instance.env.cwd, { withFileTypes: true }).filter((p) => p.isDirectory()),
+      ...fs.readdirSync(this.instance.env.cwd, { withFileTypes: true }).filter((p) => p.isDirectory()).map((p) => p.name),
     ]);
     this.logger.info('using skipDirEntryPatterns: ', skipDirs);
 
@@ -439,7 +440,7 @@ export class ServerContainer {
    */
   broadcastServerConfig() {
     this.logger.debug('broadcasting server.config');
-    this.nsp.emit('server.properties', this.instance.sc());
+    this.nsp.emit('server.config', this.instance.sc());
   }
 
   /**
@@ -447,7 +448,7 @@ export class ServerContainer {
    */
   broadcastCronConfig() {
     this.logger.debug('broadcasting cron.config');
-    this.nsp.emit('server.properties', this.instance.crons());
+    this.nsp.emit('cron.config', this.instance.crons());
   }
 
   /**
@@ -496,6 +497,7 @@ export class ServerContainer {
         fnArgs.push(args[arg]);
       } else {
         args.success = false;
+        args.time_resolved = Date.now();
         args.error = `Provided values missing required argument: ${arg}`;
         this.logger.error(args.error);
 
@@ -523,8 +525,12 @@ export class ServerContainer {
       this.logger.error(`error running "${args.command}"`, e);
       args.success = false;
       args.error = e;
+      args.time_resolved = Date.now();
       this.nsp.emit('server_fin', args);
     }
+    args.success = true;
+    args.time_resolved = Date.now();
+    this.nsp.emit('server_fin', args);
   }
 
   /**

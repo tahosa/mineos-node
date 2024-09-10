@@ -670,9 +670,9 @@ export class Instance {
   /**
    * Send a command to the Minecraft process
    *
-   * @param command Command to send
+   * @param msg Command to send
    */
-  async stuff(command: string): Promise<string> {
+  async stuff(msg: string): Promise<string> {
     const params = {
       cwd: this.env.cwd,
       ...(await this.getOwner()),
@@ -684,7 +684,7 @@ export class Instance {
     }
 
     return child
-      .execFileSync(binary, ['-S', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${command}\x0a"`], params)
+      .execFileSync(binary, ['-S', `mc-${this.name}`, '-p', '0', '-X', 'eval', `stuff "${msg}\x0a"`], params)
       .toString('utf-8');
   }
 
@@ -1387,7 +1387,7 @@ export class Instance {
         xmx: config.java_xmx ? parseInt(config.java_xmx) : 256,
         xms: config.java_xms ? parseInt(config.java_xms) : 0,
         jarfile: config.jarfile,
-        jar_args: config.jar_args ?? '',
+        jar_args: config.jar_args ?? 'nogui',
         java_tweaks: config.java_tweaks ?? null,
       };
 
