@@ -275,14 +275,16 @@ export class ServerContainer {
     clearInterval(this.intervals.heartbeat);
     this.intervals.heartbeat = setInterval(() => { this.heartbeat() }, HEARTBEAT_INTERVAL_MS * 3);
 
-    const [up, memory, query, ping] = await Promise.all([
+    const [up, memory, query, ping] = (await Promise.allSettled([
       Promise.resolve(this.instance.isUp()),
       this.instance.getJavaProcessStats(),
       this.instance.sp()['enable-query'] ? this.instance.query() : Promise.resolve({}),
       !this.instance.sc().minecraft?.unconventional ? this.instance.ping() : Promise.resolve({}),
-    ]).catch((e) => {
-      this.logger.debug('heartbeat error', { error: e });
-      return [];
+    ])).map((val) => {
+      if (val.status === 'fulfilled') {
+        return val.value;
+      }
+      return {};
     });
 
     clearInterval(this.intervals.heartbeat);
