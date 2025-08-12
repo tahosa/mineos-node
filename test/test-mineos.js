@@ -12,7 +12,7 @@ var PROC_START_DELAY_MS = 200;
 
 var OWNER_CREDS = {
   uid: 1001,
-  gid: 118
+  gid: 100
 }
 
 function oct2dec(octal_val) {
@@ -1258,7 +1258,7 @@ test.chown = function(test) {
 
   var NEW_OWNER_CREDS = {
     uid: 1001,
-    gid: 118
+    gid: 100
   }
 
   async.series([
@@ -1309,7 +1309,7 @@ test.chown_recursive = function(test) {
 
   var NEW_OWNER_CREDS = {
     uid: 1001,
-    gid: 118
+    gid: 100
   }
 
   var newfile = path.join(instance.env.cwd, 'newfile');
